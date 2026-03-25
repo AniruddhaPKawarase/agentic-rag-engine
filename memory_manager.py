@@ -364,13 +364,45 @@ class MemoryManager:
         return session_id
     
     def get_session(self, session_id: str) -> Optional[ConversationSession]:
-        """Get a session by ID"""
+        """Get a session by ID. Falls back to S3 if not in memory."""
         session = self.sessions.get(session_id)
         if session:
             # Update access time and move to end (most recent)
             session.last_accessed = time.time()
             self.sessions.move_to_end(session_id)
+            return session
+
+        # S3 fallback: load individual session if evicted from memory
+        session = self._load_session_from_s3(session_id)
+        if session:
+            session.last_accessed = time.time()
+            self.sessions[session_id] = session
+            self.sessions.move_to_end(session_id)
+            # Evict LRU if over capacity
+            if len(self.sessions) > self.max_sessions:
+                oldest_id = next(iter(self.sessions))
+                del self.sessions[oldest_id]
+            print(f"Session {session_id} restored from S3 (cache miss)")
         return session
+
+    def _load_session_from_s3(self, session_id: str) -> Optional[ConversationSession]:
+        """Load a single session from S3 by session_id."""
+        if os.getenv("STORAGE_BACKEND", "local") != "s3":
+            return None
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+            from s3_utils.operations import download_bytes
+            from s3_utils.helpers import session_key
+            s3_prefix = os.getenv("S3_AGENT_PREFIX", "rag-agent")
+            s3_k = session_key(s3_prefix, f"{session_id}.json")
+            raw = download_bytes(s3_k)
+            if raw:
+                session_data = json.loads(raw.decode("utf-8"))
+                return self._deserialize_session(session_data)
+        except Exception as e:
+            print(f"S3 single session load failed for {session_id}: {e}")
+        return None
     
     def add_to_session(
         self,
