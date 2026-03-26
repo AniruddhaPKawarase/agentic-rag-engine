@@ -26,7 +26,7 @@ from .helpers import (
     parse_follow_up_questions,
 )
 from .greeting_agent import build_greeting_response, classify_query
-from .intent import detect_intent
+from .intent import detect_intent, extract_drawing_reference
 from .prompts import (
     build_clarification_prompt,
     build_hybrid_prompt,
@@ -207,13 +207,45 @@ def generate_unified_answer(
     if detected_trade:
         print(f"   🏗️ Detected trade: {detected_trade}")
 
+    # ── Query augmentation for follow-up and reference intents ────────────
+    retrieval_query = user_query
+    drawing_name_filter = None
+    drawing_title_filter = None
+
+    if MEMORY_MANAGER and current_session_id and intent_type in ("follow_up", "reference_previous"):
+        session = MEMORY_MANAGER.get_session(current_session_id)
+        if session:
+            prev_q = session.get_last_user_message()
+            prev_a = session.get_last_assistant_message()
+            if intent_type == "follow_up" and prev_q:
+                # Augment: "tell me more" → "tell me more about [previous topic]"
+                retrieval_query = f"{user_query}. Context: Previously asked '{prev_q}'"
+                if prev_a:
+                    retrieval_query += f" and received: '{prev_a[:500]}'"
+                print(f"   🔄 Follow-up augmented query (len={len(retrieval_query)})")
+            elif intent_type == "reference_previous" and prev_a:
+                # Augment: "what size" → include previous answer for reference
+                retrieval_query = f"{user_query}. Reference from previous answer: '{prev_a[:500]}'"
+                print(f"   🔗 Reference augmented query (len={len(retrieval_query)})")
+
+    # ── Drawing name/title detection for filtered retrieval ───────────────
+    d_name, d_title = extract_drawing_reference(user_query)
+    if d_name:
+        drawing_name_filter = d_name
+        print(f"   📐 Drawing name detected: {d_name}")
+    if d_title:
+        drawing_title_filter = d_title
+        print(f"   📐 Drawing title detected: {d_title}")
+
     def _do_rag():
         chunks = retrieve_context(
-            query=user_query,
+            query=retrieval_query,
             top_k=top_k + 4,  # overfetch to allow filtering
             min_score=min_score,
             filter_source_type=filter_source_type,
             filter_project_id=project_id,
+            filter_drawing_name=drawing_name_filter,
+            filter_drawing_title=drawing_title_filter,
         )
         valid = [c for c in chunks if c.get("text", "").strip() and len(c.get("text", "").strip()) > 10]
         # Trade filter
@@ -291,31 +323,53 @@ def generate_unified_answer(
         session = MEMORY_MANAGER.get_session(current_session_id)
         if session:
             conversation_messages = session.get_conversation_for_llm(
-                max_tokens=2000, preserve_early_history=True,
+                max_tokens=3000, preserve_early_history=True,
             )
             q_index = session.get_conversation_index()
 
-            # Build context from recent exchanges, but SKIP the previous answer
-            # if the user asked the SAME question (mode-switch scenario)
-            recent = []
-            for msg in conversation_messages[-4:]:
+            # ── Enhanced conversation context (v3) ────────────────────────
+            # Last Q+A pair: FULL content (no truncation) for continuity
+            # Older messages: 300 chars each for token efficiency
+            context_parts = []
+
+            # Get the last user question (before current) and last assistant answer
+            last_user_q = session.get_last_user_message()
+            last_assistant_a = session.get_last_assistant_message()
+
+            if last_user_q:
+                context_parts.append(f"[LAST QUESTION]: {last_user_q}")
+            if last_assistant_a:
+                context_parts.append(f"[LAST ANSWER]: {last_assistant_a}")
+
+            # Older messages (beyond the last pair): 300 chars each
+            older_msgs = conversation_messages[:-4] if len(conversation_messages) > 4 else []
+            for msg in older_msgs[-6:]:  # max 6 older messages
                 role = msg.get("role", "")
                 content = msg.get("content", "")
                 msg_mode = msg.get("metadata", {}).get("search_mode", "") if isinstance(msg.get("metadata"), dict) else ""
-
                 if role == "user":
-                    recent.append(f"User previously asked: {content[:150]}")
+                    context_parts.append(f"User previously asked: {content[:300]}")
                 elif role == "assistant":
-                    # If the previous answer was from a DIFFERENT mode, note it
                     if msg_mode and msg_mode != search_mode:
-                        recent.append(f"[Previous answer was from {msg_mode.upper()} mode — user has now switched to {search_mode.upper()} mode]")
+                        context_parts.append(f"[Previous answer was from {msg_mode.upper()} mode — user has now switched to {search_mode.upper()} mode]")
                     else:
-                        recent.append(f"You previously answered: {content[:150]}")
+                        context_parts.append(f"You previously answered: {content[:300]}")
 
-            if recent:
-                conversation_context = "\n".join(recent)
+            if context_parts:
+                conversation_context = "\n".join(context_parts)
             if q_index:
                 conversation_context += f"\n\nCOMPLETE LIST OF USER QUESTIONS IN THIS SESSION:\n{q_index}"
+
+            # Trim conversation context to 3000 token budget
+            while estimate_tokens(conversation_context) > 3000 and context_parts:
+                # Remove oldest entries first (keep last Q+A pair)
+                if len(context_parts) > 2:
+                    context_parts.pop(2)  # Remove first older message
+                    conversation_context = "\n".join(context_parts)
+                    if q_index:
+                        conversation_context += f"\n\nCOMPLETE LIST OF USER QUESTIONS IN THIS SESSION:\n{q_index}"
+                else:
+                    break
         elif conversation_history:
             conversation_messages = conversation_history
 

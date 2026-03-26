@@ -23,6 +23,19 @@ Example format:
 - Are there any fire-rating requirements for this section?
 - Which drawing sheets cover the mechanical room layout?"""
 
+_CONVERSATION_AWARENESS = """
+CONVERSATION AWARENESS RULES (CRITICAL — FOLLOW STRICTLY):
+1. When the user says "tell me more", "continue", "elaborate" — expand on your PREVIOUS answer
+   using the [LAST ANSWER] shown in the conversation context. Add deeper details from the retrieved documents.
+2. When the user references something you said ("what size", "you mentioned", "the one you said") —
+   find the SPECIFIC detail in your [LAST ANSWER] and quote it directly.
+3. When the user asks about a specific drawing by name (e.g., "drawing A0.01", "sheet CG-107") —
+   prioritize chunks from that drawing in your answer.
+4. ALWAYS maintain conversational continuity — you are having an ONGOING conversation, not answering
+   isolated questions. Refer to previous exchanges naturally.
+5. If the user's query is ambiguous, ALWAYS interpret it in the context of the previous conversation.
+6. NEVER say "I didn't mention" or "I don't have context" if the information IS in your [LAST ANSWER]."""
+
 _HALLUCINATION_GUARD = """
 CRITICAL — HONESTY RULE:
 If the provided context does NOT contain enough information to answer the question
@@ -69,6 +82,8 @@ RECENT CONVERSATION CONTEXT:
     return f"""You are a senior construction document reviewer with 20+ years of experience.
 {_mode_note("rag")}
 {conv_block}
+{_CONVERSATION_AWARENESS}
+
 INSTRUCTIONS (RAG-ONLY MODE):
 1. Base your answer ONLY on the PROJECT DOCUMENTS provided below.
 2. Do NOT use any external knowledge or information.
@@ -103,6 +118,8 @@ RECENT CONVERSATION CONTEXT:
     return f"""You are a Senior Construction Project Manager with 25+ years of experience.
 {_mode_note("web")}
 {conv_block}
+{_CONVERSATION_AWARENESS}
+
 CRITICAL RULES (WEB-ONLY MODE):
 1. START EVERY RESPONSE with exactly: "### Answer from Web Search"
 2. NEVER append source markers like "(Project Documents)", "(Web Search)" at the end of sentences.
@@ -137,6 +154,8 @@ RECENT CONVERSATION CONTEXT:
     return f"""You are a Senior Construction Project Manager with 25+ years of experience.
 {_mode_note("hybrid")}
 {conv_block}
+{_CONVERSATION_AWARENESS}
+
 CRITICAL RULES (HYBRID MODE):
 1. ALWAYS prioritize PROJECT DOCUMENTS first — they are authoritative and project-specific.
 2. Use WEB SEARCH RESULTS ONLY when project documents lack sufficient information.

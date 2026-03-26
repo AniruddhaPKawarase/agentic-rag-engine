@@ -24,6 +24,8 @@ def retrieve_context(
     min_score: float = 0.1,
     filter_source_type: Optional[str] = None,
     filter_project_id: Optional[int] = None,
+    filter_drawing_name: Optional[str] = None,
+    filter_drawing_title: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Semantic search over a project's FAISS index.
@@ -138,6 +140,18 @@ def retrieve_context(
         if len(results) >= top_k:
             break
 
+    # ── Drawing name/title soft boost (1.5x similarity for matches) ──────
+    if filter_drawing_name or filter_drawing_title:
+        fname = (filter_drawing_name or "").upper()
+        ftitle = (filter_drawing_title or "").lower()
+        for r in results:
+            meta_name = (r.get("drawing_name") or "").upper()
+            meta_title = (r.get("drawing_title") or "").lower()
+            if fname and fname in meta_name:
+                r["similarity"] = min(1.0, r["similarity"] * 1.5)
+            if ftitle and ftitle in meta_title:
+                r["similarity"] = min(1.0, r["similarity"] * 1.5)
+
     results.sort(key=lambda x: x["similarity"], reverse=True)
     return results
 
@@ -149,6 +163,8 @@ def retrieve_context_with_session(
     min_score: float = 0.1,
     filter_source_type: Optional[str] = None,
     filter_project_id: Optional[int] = None,
+    filter_drawing_name: Optional[str] = None,
+    filter_drawing_title: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Retrieve context with optional session-topic enhancement.
@@ -165,9 +181,11 @@ def retrieve_context_with_session(
             enhanced_query = f"{query} [Related to: {topics_str}]"
 
     return retrieve_context(
-        query              = enhanced_query,
-        top_k              = top_k,
-        min_score          = min_score,
-        filter_source_type = filter_source_type,
-        filter_project_id  = filter_project_id,
+        query                = enhanced_query,
+        top_k                = top_k,
+        min_score            = min_score,
+        filter_source_type   = filter_source_type,
+        filter_project_id    = filter_project_id,
+        filter_drawing_name  = filter_drawing_name,
+        filter_drawing_title = filter_drawing_title,
     )

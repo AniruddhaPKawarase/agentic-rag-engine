@@ -1,17 +1,21 @@
 """Lightweight regex-based intent detector.
 
 Zero-latency classification of user input into:
-  - "greeting"           : hello, hi, good morning, etc.
-  - "small_talk"         : how are you, what can you do, etc.
-  - "thanks"             : thank you, thanks, etc.
-  - "farewell"           : bye, goodbye, see you, etc.
-  - "meta_conversation"  : what was my first question, how many questions, etc.
-  - "document_query"     : anything else (default -- proceed to RAG pipeline)
+  - "greeting"              : hello, hi, good morning, etc.
+  - "small_talk"            : how are you, what can you do, etc.
+  - "thanks"                : thank you, thanks, etc.
+  - "farewell"              : bye, goodbye, see you, etc.
+  - "meta_conversation"     : what was my first question, how many questions, etc.
+  - "follow_up"             : tell me more, continue, elaborate, expand on that
+  - "reference_previous"    : what size you mentioned, you said, as you mentioned
+  - "drawing_specific"      : queries referencing a drawing name (A0.01, CG-107, M-101)
+  - "drawing_title_specific": queries referencing a drawing title (Partition Schedule, Floor Plan)
+  - "document_query"        : anything else (default -- proceed to RAG pipeline)
 
 NO LLM call. NO embedding. NO API call. Pure regex. ~0ms.
 """
 import re
-from typing import Tuple
+from typing import Optional, Tuple
 
 # ── PATTERN DEFINITIONS ──────────────────────────────────────────────────────
 # Each pattern is compiled once at import time for maximum performance.
@@ -69,6 +73,71 @@ _META_CONVERSATION_PATTERNS = [
     r"what\s+questions?\s+did\s+i\s+ask",
 ]
 
+# ── NEW: Follow-up intent patterns ──────────────────────────────────────────
+# Matched when user wants to continue/expand on the previous answer.
+# These are anchored (^ ... $) so "tell me more about HVAC specs" does NOT match.
+
+_FOLLOW_UP_PATTERNS = [
+    r"^\s*tell\s+me\s+more(\s+about\s+(it|that|this))?\s*[!.?]*\s*$",
+    r"^\s*(continue|go\s+on|keep\s+going|proceed)\s*[!.?]*\s*$",
+    r"^\s*(elaborate|expand)(\s+on\s+(that|this|it))?\s*[!.?]*\s*$",
+    r"^\s*more\s+(details?|info(rmation)?|about\s+(it|that|this))\s*[!.?]*\s*$",
+    r"^\s*what\s+else\s*[!.?]*\s*$",
+    r"^\s*and\s*\?\s*$",
+    r"^\s*explain\s+(more|further|in\s+detail)\s*[!.?]*\s*$",
+    r"^\s*can\s+you\s+(elaborate|expand|explain\s+more|give\s+more\s+details?)\s*[!.?]*\s*$",
+    r"^\s*go\s+(deeper|further)\s*[!.?]*\s*$",
+    r"^\s*tell\s+me\s+more\s*$",
+]
+
+# ── NEW: Reference-previous-answer patterns ─────────────────────────────────
+# Matched when user references something from the previous answer.
+
+_REFERENCE_PREVIOUS_PATTERNS = [
+    r"what\s+(size|dimension|measurement|number|value|amount|quantity|specification|material)\s+(you|did\s+you)\s+(mention|say|state|give|provide|specify|note)",
+    r"(you|the)\s+(said|mentioned|stated|noted|specified|provided|gave|told\s+me)",
+    r"as\s+(you|previously)\s+(mentioned|said|stated|noted)",
+    r"(the|that)\s+(one|size|type|value|number)\s+you\s+(mentioned|said|gave)",
+    r"what\s+did\s+you\s+(say|mean|mention)\s+(about|regarding)",
+    r"(your|the)\s+(previous|last)\s+(answer|response|reply)",
+    r"(refer|referring)\s+to\s+(your|the)\s+(previous|last)",
+    r"what\s+was\s+(the|that)\s+(size|value|number|measurement|answer)",
+    r"you\s+told\s+me\s+(about|that|the)",
+]
+
+# ── NEW: Drawing name pattern ────────────────────────────────────────────────
+# Matches construction drawing names like A0.01, A912, CG-107, M-101, E1.02, S-501
+# Must have at least one letter prefix and at least one digit.
+
+_DRAWING_NAME_PATTERN = re.compile(
+    r"\b([A-Z]{1,4}[-.]?\d{1,4}(?:[.-]\d{1,3})?)\b",
+    re.IGNORECASE,
+)
+
+# ── NEW: Drawing title keywords ──────────────────────────────────────────────
+# Common construction drawing titles that appear in drawingTitle metadata.
+# These are partial matches (not anchored) so "notes on Partition Schedule" works.
+
+_DRAWING_TITLE_KEYWORDS = [
+    "partition schedule", "floor plan", "roof plan", "foundation plan",
+    "electrical details", "electrical symbols", "electrical schedules",
+    "plumbing symbols", "plumbing roof plan", "plumbing details",
+    "mechanical schedules", "mechanical details",
+    "structural details", "concrete details", "concrete grade beam",
+    "section details", "interior opening details", "exterior plan details",
+    "room finish schedule", "material schedule", "general notes",
+    "legend and notes", "site plan", "sitework details",
+    "roof details", "wall section", "door schedule", "window schedule",
+    "fire alarm", "fire protection", "irrigation detail",
+    "demolition plan", "reflected ceiling plan", "framing plan",
+]
+
+_DRAWING_TITLE_PATTERN = re.compile(
+    r"\b(" + "|".join(re.escape(t) for t in _DRAWING_TITLE_KEYWORDS) + r")\b",
+    re.IGNORECASE,
+)
+
+
 # Compile all patterns once at import time
 _COMPILED = {
     "greeting":          [re.compile(p, re.IGNORECASE) for p in _GREETING_PATTERNS],
@@ -76,6 +145,8 @@ _COMPILED = {
     "thanks":            [re.compile(p, re.IGNORECASE) for p in _THANKS_PATTERNS],
     "farewell":          [re.compile(p, re.IGNORECASE) for p in _FAREWELL_PATTERNS],
     "meta_conversation": [re.compile(p, re.IGNORECASE) for p in _META_CONVERSATION_PATTERNS],
+    "follow_up":         [re.compile(p, re.IGNORECASE) for p in _FOLLOW_UP_PATTERNS],
+    "reference_previous":[re.compile(p, re.IGNORECASE) for p in _REFERENCE_PREVIOUS_PATTERNS],
 }
 
 # ── FRIENDLY RESPONSES ───────────────────────────────────────────────────────
@@ -109,25 +180,52 @@ def detect_intent(query: str) -> Tuple[str, str]:
     """
     Classify user query into an intent category.
 
-    Args:
-        query: Raw user input string.
-
     Returns:
         Tuple of (intent_type, friendly_response).
         - intent_type: one of "greeting", "small_talk", "thanks", "farewell",
-                       "meta_conversation", "document_query".
+                       "meta_conversation", "follow_up", "reference_previous",
+                       "document_query".
         - friendly_response: pre-built response for non-document intents,
-                             empty string for "document_query" and "meta_conversation".
+                             empty string for document/follow-up intents.
     """
     text = query.strip()
     if not text:
         return ("document_query", "")
 
-    # Check each intent category (order: greeting > small_talk > thanks > farewell > meta)
-    for intent_type, patterns in _COMPILED.items():
-        for pattern in patterns:
+    # Check each intent category in priority order
+    for intent_type in ("greeting", "small_talk", "thanks", "farewell",
+                        "meta_conversation", "follow_up", "reference_previous"):
+        for pattern in _COMPILED[intent_type]:
             if pattern.search(text):
                 response = _FRIENDLY_RESPONSES.get(intent_type, "")
                 return (intent_type, response)
 
     return ("document_query", "")
+
+
+def extract_drawing_reference(query: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Extract drawing name and/or drawing title reference from a query.
+
+    Returns:
+        Tuple of (drawing_name, drawing_title).
+        - drawing_name: e.g. "A0.01", "CG-107", "M-101" (or None)
+        - drawing_title: e.g. "Partition Schedule", "Floor Plan" (or None)
+    """
+    drawing_name = None
+    drawing_title = None
+
+    # Check for drawing name pattern (e.g., A0.01, CG-107)
+    name_match = _DRAWING_NAME_PATTERN.search(query)
+    if name_match:
+        candidate = name_match.group(1)
+        # Must have at least one letter AND one digit to be a drawing name
+        if re.search(r"[A-Za-z]", candidate) and re.search(r"\d", candidate):
+            drawing_name = candidate.upper()
+
+    # Check for drawing title keyword
+    title_match = _DRAWING_TITLE_PATTERN.search(query)
+    if title_match:
+        drawing_title = title_match.group(1)
+
+    return drawing_name, drawing_title

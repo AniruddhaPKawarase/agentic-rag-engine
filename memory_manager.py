@@ -77,6 +77,25 @@ class ConversationSession:
         if self.summaries is None:
             self.summaries = []
     
+    def get_last_message_by_role(self, role: str) -> Optional[str]:
+        """Get the content of the last message with the given role."""
+        for msg in reversed(self.messages):
+            if msg.role == role:
+                return msg.content
+        return None
+
+    def get_last_user_message(self) -> Optional[str]:
+        """Get the last user message content (excluding the current query)."""
+        user_msgs = [m for m in self.messages if m.role == "user"]
+        # Return second-to-last if available (last one is the current query)
+        if len(user_msgs) >= 2:
+            return user_msgs[-2].content
+        return None
+
+    def get_last_assistant_message(self) -> Optional[str]:
+        """Get the last assistant message content."""
+        return self.get_last_message_by_role("assistant")
+
     def get_formatted_messages(self, include_system: bool = True) -> List[Dict[str, str]]:
         """Format messages for OpenAI API"""
         formatted = []
