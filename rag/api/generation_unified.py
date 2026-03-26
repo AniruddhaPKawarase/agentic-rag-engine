@@ -178,6 +178,13 @@ def generate_unified_answer(
                 project_id=project_id,
                 filter_source_type=filter_source_type,
             )
+            # CRITICAL: Also add the first user message to the session
+            # (create_session only stores it in metadata, not as a Message)
+            MEMORY_MANAGER.add_to_session(
+                session_id=current_session_id, role="user", content=user_query,
+                tokens=estimate_tokens(user_query),
+                metadata={"search_mode": search_mode, "project_id": project_id},
+            )
         elif session_id:
             session = MEMORY_MANAGER.get_session(session_id)
             if session:
@@ -191,6 +198,11 @@ def generate_unified_answer(
                 current_session_id = MEMORY_MANAGER.create_session(
                     user_query=user_query, project_id=project_id,
                     filter_source_type=filter_source_type, session_id=session_id,
+                )
+                MEMORY_MANAGER.add_to_session(
+                    session_id=current_session_id, role="user", content=user_query,
+                    tokens=estimate_tokens(user_query),
+                    metadata={"search_mode": search_mode, "project_id": project_id},
                 )
 
     # ══════════════════════════════════════════════════════════════════════════

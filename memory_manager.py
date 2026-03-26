@@ -85,11 +85,15 @@ class ConversationSession:
         return None
 
     def get_last_user_message(self) -> Optional[str]:
-        """Get the last user message content (excluding the current query)."""
+        """Get the PREVIOUS user message content (not the current query).
+        The current query is always the last user message, so we return second-to-last."""
         user_msgs = [m for m in self.messages if m.role == "user"]
-        # Return second-to-last if available (last one is the current query)
         if len(user_msgs) >= 2:
             return user_msgs[-2].content
+        # If only 1 user message, it's the current query — return it anyway
+        # (better than None for first-question follow-ups)
+        if len(user_msgs) == 1:
+            return user_msgs[0].content
         return None
 
     def get_last_assistant_message(self) -> Optional[str]:

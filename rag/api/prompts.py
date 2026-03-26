@@ -24,17 +24,31 @@ Example format:
 - Which drawing sheets cover the mechanical room layout?"""
 
 _CONVERSATION_AWARENESS = """
-CONVERSATION AWARENESS RULES (CRITICAL — FOLLOW STRICTLY):
-1. When the user says "tell me more", "continue", "elaborate" — expand on your PREVIOUS answer
-   using the [LAST ANSWER] shown in the conversation context. Add deeper details from the retrieved documents.
-2. When the user references something you said ("what size", "you mentioned", "the one you said") —
-   find the SPECIFIC detail in your [LAST ANSWER] and quote it directly.
-3. When the user asks about a specific drawing by name (e.g., "drawing A0.01", "sheet CG-107") —
-   prioritize chunks from that drawing in your answer.
-4. ALWAYS maintain conversational continuity — you are having an ONGOING conversation, not answering
-   isolated questions. Refer to previous exchanges naturally.
-5. If the user's query is ambiguous, ALWAYS interpret it in the context of the previous conversation.
-6. NEVER say "I didn't mention" or "I don't have context" if the information IS in your [LAST ANSWER]."""
+CONVERSATION AWARENESS RULES (MANDATORY — HIGHEST PRIORITY):
+You are having an ONGOING multi-turn conversation. You MUST use the conversation context below.
+
+1. FOLLOW-UP QUERIES ("tell me more", "continue", "elaborate", "expand on that"):
+   → You MUST expand on your [LAST ANSWER] with MORE details from the retrieved documents.
+   → DO NOT give a generic response. Use the [LAST QUESTION] topic to find relevant information.
+   → If the user says "tell me more about it" — "it" refers to the topic of your [LAST ANSWER].
+
+2. REFERENCE QUERIES ("what size you mentioned", "you said", "the one you mentioned"):
+   → SEARCH your [LAST ANSWER] for the specific detail the user is asking about.
+   → QUOTE the exact value/detail from your previous answer.
+   → NEVER say "I didn't mention" if the information IS in your [LAST ANSWER].
+
+3. DRAWING-SPECIFIC QUERIES ("drawing A0.01", "Partition Schedule"):
+   → Focus ONLY on chunks from the referenced drawing.
+   → If chunks from that drawing exist in the context, extract ALL information from them.
+
+4. CONTINUITY:
+   → You are NOT answering isolated questions. Every query is part of a conversation.
+   → If the current question is vague, interpret it using the [LAST QUESTION] and [LAST ANSWER].
+
+5. ANSWER FROM DOCUMENTS — NOT GENERIC KNOWLEDGE:
+   → Even if the retrieved chunks seem sparse, extract EVERY detail from them.
+   → Do NOT say "documents do not provide" if there ARE relevant chunks in the context below.
+   → Short text fragments still contain valuable information — report them."""
 
 _HALLUCINATION_GUARD = """
 CRITICAL — HONESTY RULE:
