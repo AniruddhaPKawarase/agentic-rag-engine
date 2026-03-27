@@ -72,7 +72,7 @@ async def health_check(project_id: Optional[int] = Query(None, description="Proj
     """Health check endpoint"""
     openai_available = False
     try:
-        client.models.list(limit=1)
+        client.models.list()
         openai_available = True
     except Exception as e:
         print(f"OpenAI health check failed: {e}")
@@ -90,6 +90,13 @@ async def health_check(project_id: Optional[int] = Query(None, description="Proj
                 index_vectors = config.index.ntotal
             if config.metadata:
                 metadata_records = len(config.metadata)
+        else:
+            # Aggregate across all loaded projects
+            for pid, config in PROJECTS.items():
+                if config.loaded and config.index is not None:
+                    index_vectors += config.index.ntotal
+                if config.metadata:
+                    metadata_records += len(config.metadata)
     except Exception as e:
         print(f"Retrieval health check failed: {e}")
 
