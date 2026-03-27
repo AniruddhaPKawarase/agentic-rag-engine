@@ -5,6 +5,7 @@ Every prompt now includes:
   - Hallucination guard: when context is insufficient the LLM must say so
   - Mode-aware instructions so switching RAG↔web↔hybrid gives fresh answers
 """
+from typing import Optional
 
 # ── Shared suffix appended to ALL prompts ────────────────────────────────────
 
@@ -78,8 +79,21 @@ def _mode_note(search_mode: str) -> str:
 #  RAG Prompt
 # ══════════════════════════════════════════════════════════════════════════════
 
-def build_rag_prompt(user_query: str, rag_context: str, conversation_context: str, include_citations: bool) -> str:
+def build_rag_prompt(user_query: str, rag_context: str, conversation_context: str, include_citations: bool, pinned_titles: Optional[list] = None) -> str:
     """Build system prompt for RAG-only mode."""
+    # Document scope block (only when documents are pinned)
+    document_scope = ""
+    if pinned_titles:
+        doc_list = ", ".join(f'"{t}"' for t in pinned_titles)
+        document_scope = (
+            f"\n\nDOCUMENT SCOPE: You are currently focused on answering questions "
+            f"ONLY about the following pinned document(s): {doc_list}. "
+            f"Focus exclusively on content from these documents. "
+            f"If the user asks about something not in these documents, "
+            f"let them know the information is not in the pinned document(s) "
+            f"and suggest they return to the full project scope."
+        )
+
     conv_block = ""
     if conversation_context:
         conv_block = f"""
@@ -94,7 +108,7 @@ RECENT CONVERSATION CONTEXT:
     )
 
     return f"""You are a senior construction document reviewer with 20+ years of experience.
-{_mode_note("rag")}
+{_mode_note("rag")}{document_scope}
 {conv_block}
 {_CONVERSATION_AWARENESS}
 

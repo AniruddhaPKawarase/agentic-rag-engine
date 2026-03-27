@@ -26,7 +26,7 @@ from .helpers import (
     parse_follow_up_questions,
 )
 from .greeting_agent import build_greeting_response, classify_query
-from .intent import detect_intent, extract_drawing_reference
+from .intent import detect_intent, extract_drawing_reference, extract_document_reference
 from .prompts import (
     build_clarification_prompt,
     build_hybrid_prompt,
@@ -118,6 +118,8 @@ def generate_unified_answer(
     debug: bool = False,
     session_id: Optional[str] = None,
     create_new_session: bool = False,
+    pin_documents: Optional[List[str]] = None,
+    unpin: bool = False,
 ) -> Dict[str, Any]:
     """Unified generation with follow-ups, hallucination guard, and token tracking."""
     start_time = time.time()
@@ -206,6 +208,68 @@ def generate_unified_answer(
                 )
 
     # ══════════════════════════════════════════════════════════════════════════
+    # 1b. Document Pin State Management
+    # ══════════════════════════════════════════════════════════════════════════
+    active_pin_documents: Optional[List[str]] = None
+    active_pin_titles: List[str] = []
+    auto_unpinned = False
+
+    if MEMORY_MANAGER and current_session_id:
+        session = MEMORY_MANAGER.get_session(current_session_id)
+        if session:
+            ctx = session.context
+
+            # Handle explicit unpin request
+            if unpin or intent_type == "unpin_document":
+                ctx.pinned_documents = []
+                ctx.pinned_titles = []
+                print("   📌 Documents unpinned — returning to full project scope")
+
+            # Handle explicit pin request from API
+            elif pin_documents:
+                ctx.pinned_documents = pin_documents
+                # Try to resolve titles from last source documents
+                titles = []
+                for pn in pin_documents:
+                    matched_title = pn  # fallback
+                    for doc in (ctx.last_source_documents or []):
+                        if (doc.get("file_name", "").lower().startswith(pn.lower()) or
+                                doc.get("pdf_name", "").lower() == pn.lower()):
+                            matched_title = doc.get("display_title") or doc.get("file_name") or pn
+                            break
+                    titles.append(matched_title)
+                ctx.pinned_titles = titles
+                print(f"   📌 Documents pinned via API: {pin_documents}")
+
+            # Handle natural language pin intent
+            elif intent_type == "document_chat":
+                doc_ref = extract_document_reference(user_query)
+                if doc_ref and ctx.last_source_documents:
+                    matched_pdfs = []
+                    matched_titles = []
+                    ref_lower = doc_ref.lower()
+                    for doc in ctx.last_source_documents:
+                        pdf = doc.get("file_name", doc.get("pdf_name", ""))
+                        title = doc.get("display_title", "")
+                        drawing = doc.get("drawing_name", "")
+                        if (ref_lower in pdf.lower() or ref_lower in title.lower() or
+                                ref_lower in drawing.lower() or
+                                pdf.lower() in ref_lower or drawing.lower() == ref_lower):
+                            matched_pdfs.append(pdf)
+                            matched_titles.append(title or pdf)
+                    if matched_pdfs:
+                        ctx.pinned_documents = matched_pdfs
+                        ctx.pinned_titles = matched_titles
+                        print(f"   📌 Documents pinned via NL: {matched_pdfs}")
+                    else:
+                        print(f"   📌 Could not match '{doc_ref}' to source documents")
+
+            # Read current pin state
+            if ctx.pinned_documents:
+                active_pin_documents = ctx.pinned_documents
+                active_pin_titles = ctx.pinned_titles or []
+
+    # ══════════════════════════════════════════════════════════════════════════
     # 2. Retrieval (with trade filtering + context budgeting)
     # ══════════════════════════════════════════════════════════════════════════
     rag_context_chunks: List[Dict] = []
@@ -249,7 +313,7 @@ def generate_unified_answer(
         drawing_title_filter = d_title
         print(f"   📐 Drawing title detected: {d_title}")
 
-    def _do_rag():
+    def _do_rag(pdf_filter=None):
         chunks = retrieve_context(
             query=retrieval_query,
             top_k=top_k + 4,  # overfetch to allow filtering
@@ -258,6 +322,7 @@ def generate_unified_answer(
             filter_project_id=project_id,
             filter_drawing_name=drawing_name_filter,
             filter_drawing_title=drawing_title_filter,
+            filter_pdf_names=pdf_filter,
         )
         valid = [c for c in chunks if c.get("text", "").strip() and len(c.get("text", "").strip()) > 10]
         # Trade filter
@@ -300,9 +365,24 @@ def generate_unified_answer(
 
     elif search_mode in ("rag", "hybrid"):
         try:
-            rag_context_chunks = _do_rag()
+            rag_context_chunks = _do_rag(pdf_filter=active_pin_documents)
+
+            # Auto-unpin: if pinned docs returned 0 results, retry with full project
+            if active_pin_documents and len(rag_context_chunks) == 0:
+                print(f"   📌 Auto-unpin: pinned docs returned 0 results, falling back to full project")
+                rag_context_chunks = _do_rag(pdf_filter=None)
+                auto_unpinned = True
+                active_pin_documents = None
+                active_pin_titles = []
+                if MEMORY_MANAGER and current_session_id:
+                    session = MEMORY_MANAGER.get_session(current_session_id)
+                    if session:
+                        session.context.pinned_documents = []
+                        session.context.pinned_titles = []
+
             rag_context_text = build_context_text(rag_context_chunks, include_citations)
-            print(f"   📄 RAG retrieval: {len(rag_context_chunks)} chunks, context_len={len(rag_context_text)}")
+            pin_label = f" [PINNED: {active_pin_documents}]" if active_pin_documents else ""
+            print(f"   📄 RAG retrieval: {len(rag_context_chunks)} chunks, context_len={len(rag_context_text)}{pin_label}")
         except Exception as e:
             print(f"   ❌ RAG error (retrieval failed, context will be empty): {e}")
             traceback.print_exc()
@@ -614,7 +694,19 @@ def generate_unified_answer(
         "search_mode": search_mode,
         "web_sources": web_sources,
         "web_source_count": web_source_count,
+        "pin_status": {
+            "active": bool(active_pin_documents),
+            "pinned_documents": active_pin_documents or [],
+            "pinned_titles": active_pin_titles,
+            "auto_unpinned": auto_unpinned,
+        },
     }
+
+    # Save source documents to session context for future document pinning
+    if MEMORY_MANAGER and current_session_id and source_documents:
+        session = MEMORY_MANAGER.get_session(current_session_id)
+        if session:
+            session.context.last_source_documents = source_documents
 
     if debug:
         final_result["debug_info"] = {

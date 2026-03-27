@@ -27,7 +27,7 @@ from .helpers import (
     format_filename_for_display,
     parse_follow_up_questions,
 )
-from .intent import detect_intent
+from .intent import detect_intent, extract_drawing_reference, extract_document_reference
 from .prompts import (
     build_clarification_prompt,
     build_hybrid_prompt,
@@ -67,6 +67,8 @@ async def stream_unified_answer(
     project_id: Optional[int] = None,
     session_id: Optional[str] = None,
     create_new_session: bool = False,
+    pin_documents: Optional[List[str]] = None,
+    unpin: bool = False,
 ) -> AsyncGenerator[str, None]:
     """Async generator that yields SSE events for a streaming answer.
 
@@ -133,10 +135,40 @@ async def stream_unified_answer(
 
     detected_trade = detect_trade_from_query(user_query)
 
-    def _do_rag():
+    # ── Document pin state ───────────────────────────────────────────────────
+    active_pin_documents: Optional[List[str]] = None
+    active_pin_titles: List[str] = []
+    auto_unpinned = False
+
+    if MEMORY_MANAGER and current_session_id:
+        session = MEMORY_MANAGER.get_session(current_session_id)
+        if session:
+            ctx = session.context
+            if unpin or intent_type == "unpin_document":
+                ctx.pinned_documents = []
+                ctx.pinned_titles = []
+            elif pin_documents:
+                ctx.pinned_documents = pin_documents
+                ctx.pinned_titles = pin_documents  # titles resolved from source docs if available
+            elif intent_type == "document_chat":
+                doc_ref = extract_document_reference(user_query)
+                if doc_ref and ctx.last_source_documents:
+                    for doc in ctx.last_source_documents:
+                        pdf = doc.get("file_name", doc.get("pdf_name", ""))
+                        title = doc.get("display_title", "")
+                        if doc_ref.lower() in pdf.lower() or doc_ref.lower() in title.lower():
+                            ctx.pinned_documents = [pdf]
+                            ctx.pinned_titles = [title or pdf]
+                            break
+            if ctx.pinned_documents:
+                active_pin_documents = ctx.pinned_documents
+                active_pin_titles = ctx.pinned_titles or []
+
+    def _do_rag(pdf_filter=None):
         chunks = retrieve_context(
             query=user_query, top_k=top_k + 4, min_score=min_score,
             filter_source_type=filter_source_type, filter_project_id=project_id,
+            filter_pdf_names=pdf_filter,
         )
         valid = [c for c in chunks if c.get("text", "").strip() and len(c.get("text", "").strip()) > 10]
         if detected_trade:
@@ -161,13 +193,25 @@ async def stream_unified_answer(
     try:
         if search_mode == "hybrid" and WEB_SEARCH_AVAILABLE:
             with ThreadPoolExecutor(max_workers=2) as pool:
-                rf = pool.submit(_do_rag)
+                rf = pool.submit(_do_rag, active_pin_documents)
                 wf = pool.submit(_do_web)
                 rag_context_chunks = rf.result(timeout=15)
+                # Auto-unpin if pinned docs returned 0 results
+                if active_pin_documents and len(rag_context_chunks) == 0:
+                    rag_context_chunks = _do_rag(None)
+                    auto_unpinned = True
+                    active_pin_documents = None
+                    active_pin_titles = []
                 rag_context_text = build_context_text(rag_context_chunks)
                 web_context_text = _web_text(wf.result(timeout=15))
         elif search_mode in ("rag", "hybrid"):
-            rag_context_chunks = _do_rag()
+            rag_context_chunks = _do_rag(active_pin_documents)
+            # Auto-unpin if pinned docs returned 0 results
+            if active_pin_documents and len(rag_context_chunks) == 0:
+                rag_context_chunks = _do_rag(None)
+                auto_unpinned = True
+                active_pin_documents = None
+                active_pin_titles = []
             rag_context_text = build_context_text(rag_context_chunks)
         elif search_mode == "web" and WEB_SEARCH_AVAILABLE:
             web_context_text = _web_text(_do_web())
@@ -352,7 +396,19 @@ async def stream_unified_answer(
             "total_tokens": prompt_tokens + completion_tokens,
             "cost_estimate_usd": cost,
         },
+        "pin_status": {
+            "active": bool(active_pin_documents),
+            "pinned_documents": active_pin_documents or [],
+            "pinned_titles": active_pin_titles,
+            "auto_unpinned": auto_unpinned,
+        },
     })
+
+    # Save source documents to session for future pinning
+    if MEMORY_MANAGER and current_session_id and source_documents:
+        session = MEMORY_MANAGER.get_session(current_session_id)
+        if session:
+            session.context.last_source_documents = source_documents
 
 
 # ── Helper: intent session management ─────────────────────────────────────────

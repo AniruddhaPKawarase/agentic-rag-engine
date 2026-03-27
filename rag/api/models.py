@@ -33,6 +33,8 @@ class QueryRequest(BaseModel):
     session_id: Optional[str] = Field(None, description="Session ID for continuing conversation")
     create_new_session: bool = Field(False, description="Create a new session even if session_id is provided")
     search_mode: str = Field("rag", description="Search mode: 'rag' (default), 'web', or 'hybrid'", pattern="^(rag|web|hybrid)$")
+    pin_documents: Optional[List[str]] = Field(None, description="Pin specific documents by pdf_name for document-scoped chat")
+    unpin: bool = Field(False, description="Unpin all documents and return to full project scope")
 
 
 # NEW: Web Search Request Model
@@ -104,6 +106,13 @@ class SourceDocument(BaseModel):
     display_title: Optional[str] = Field(None, description="Human-readable drawing title (drawing_title or fallback)")
     download_url:  Optional[str] = Field(None, description="Clickable HTTPS download link to the PDF")
 
+class PinStatus(BaseModel):
+    """Document pin status for the current session."""
+    active: bool = Field(False, description="Whether documents are currently pinned")
+    pinned_documents: List[str] = Field(default_factory=list, description="List of pinned pdf_names")
+    pinned_titles: List[str] = Field(default_factory=list, description="Human-readable titles of pinned documents")
+    auto_unpinned: bool = Field(False, description="True if documents were auto-unpinned due to 0 results")
+
 class QueryResponse(BaseModel):
     """Response model for single query"""
     query: str
@@ -150,6 +159,7 @@ class QueryResponse(BaseModel):
     search_mode: str = Field("rag", description="Search mode used: rag, web, or hybrid")
     web_sources: List[Dict[str, str]] = Field(default_factory=list, description="Web sources with title and URL")
     web_source_count: int = Field(0, description="Number of web sources")
+    pin_status: Optional[PinStatus] = Field(None, description="Document pin status")
 
 # NEW: Web Search Response Model
 class WebSearchResponse(BaseModel):

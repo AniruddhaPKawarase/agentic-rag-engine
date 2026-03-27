@@ -45,10 +45,19 @@ class ConversationContext:
     recent_topics: List[str] = None
     custom_instructions: str = ""
     conversation_start_question: Optional[str] = None  # Add this field for backward compatibility
-    
+    pinned_documents: Optional[List[str]] = None  # pdf_names of pinned documents
+    pinned_titles: Optional[List[str]] = None      # human-readable titles
+    last_source_documents: Optional[List[Dict[str, Any]]] = None  # source docs from last response
+
     def __post_init__(self):
         if self.recent_topics is None:
             self.recent_topics = []
+        if self.pinned_documents is None:
+            self.pinned_documents = []
+        if self.pinned_titles is None:
+            self.pinned_titles = []
+        if self.last_source_documents is None:
+            self.last_source_documents = []
 
 @dataclass
 class ConversationSummary:
@@ -579,19 +588,25 @@ class MemoryManager:
         session_id: str,
         project_id: Optional[int] = None,
         filter_source_type: Optional[str] = None,
-        custom_instructions: Optional[str] = None
+        custom_instructions: Optional[str] = None,
+        pinned_documents: Optional[List[str]] = None,
+        pinned_titles: Optional[List[str]] = None,
     ):
         """Update conversation context"""
         session = self.get_session(session_id)
         if not session:
             return
-        
+
         if project_id is not None:
             session.context.project_id = project_id
         if filter_source_type is not None:
             session.context.filter_source_type = filter_source_type
         if custom_instructions is not None:
             session.context.custom_instructions = custom_instructions
+        if pinned_documents is not None:
+            session.context.pinned_documents = pinned_documents
+        if pinned_titles is not None:
+            session.context.pinned_titles = pinned_titles
     
     def clear_session(self, session_id: str) -> bool:
         """Clear a session — from S3 when STORAGE_BACKEND=s3, from local disk otherwise."""
@@ -744,7 +759,8 @@ class MemoryManager:
         context_data = session_data.get("context", {})
         allowed_context_fields = [
             "project_id", "filter_source_type", "recent_topics",
-            "custom_instructions", "conversation_start_question"
+            "custom_instructions", "conversation_start_question",
+            "pinned_documents", "pinned_titles", "last_source_documents"
         ]
         filtered_context = {k: v for k, v in context_data.items() if k in allowed_context_fields}
         if "recent_topics" not in filtered_context:

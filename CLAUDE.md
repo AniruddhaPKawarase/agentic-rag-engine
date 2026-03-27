@@ -335,7 +335,7 @@ python-dotenv>=1.0.0
 ### Status: COMPLETED & ACTIVATED (2026-03-23)
 - **STORAGE_BACKEND=s3** set in `.env` — S3 writes are LIVE
 - **Bucket:** `agentic-ai-production` | **Region:** `us-east-1` | **Prefix:** `rag-agent/`
-- **AWS Key:** `AKIATXJLUBGKPCIQ5TMN` (configured in `.env`)
+- **AWS Key:** `<configured in .env>` (configured in `.env`)
 - Modified: `memory_manager.py` (S3 write-through save, S3 fallback load, S3 delete)
 - Modified: `rag/retrieval/loaders.py` (S3 fallback for FAISS index download)
 - Migration script: `scripts/migrate_sessions_to_s3.py`

@@ -1,4 +1,5 @@
 """API routes, exception handlers, and startup hooks — v2."""
+import asyncio
 import datetime
 import traceback
 from typing import Optional
@@ -148,7 +149,8 @@ async def query_documents(request: QueryRequest):
     try:
         print(f"\n📨 Received query: '{request.query}' | mode={request.search_mode}")
 
-        result = generate_unified_answer(
+        result = await asyncio.to_thread(
+            generate_unified_answer,
             user_query=request.query,
             search_mode=request.search_mode,
             top_k=request.top_k,
@@ -183,7 +185,8 @@ async def quick_query_endpoint(
 ):
     """Quick query with simplified parameters for UI."""
     try:
-        result = generate_unified_answer(
+        result = await asyncio.to_thread(
+            generate_unified_answer,
             user_query=query,
             search_mode=search_mode,
             top_k=5,
@@ -259,7 +262,8 @@ async def query_stream(request: QueryRequest):
 async def web_search_endpoint(request: WebSearchRequest):
     """Generate an answer using web search."""
     try:
-        result = generate_web_search_answer(
+        result = await asyncio.to_thread(
+            generate_web_search_answer,
             user_query=request.query,
             temperature=request.temperature,
             max_tokens=request.max_tokens,

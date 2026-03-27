@@ -26,6 +26,7 @@ def retrieve_context(
     filter_project_id: Optional[int] = None,
     filter_drawing_name: Optional[str] = None,
     filter_drawing_title: Optional[str] = None,
+    filter_pdf_names: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Semantic search over a project's FAISS index.
@@ -86,6 +87,22 @@ def retrieve_context(
         meta_pid = meta.get("project_id")
         if meta_pid is not None and int(meta_pid) != filter_project_id:
             continue
+
+        # Hard filter by specific PDF names (for document-scoped chat)
+        if filter_pdf_names:
+            chunk_pdf = (meta.get("pdfName") or meta.get("pdf_name") or "").strip()
+            chunk_drawing = (meta.get("drawingName") or meta.get("drawing_name") or "").strip()
+            matched = False
+            for pin_name in filter_pdf_names:
+                pin_lower = pin_name.lower()
+                if (chunk_pdf.lower() == pin_lower or
+                    chunk_drawing.lower() == pin_lower or
+                    pin_lower in chunk_pdf.lower() or
+                    pin_lower in chunk_drawing.lower()):
+                    matched = True
+                    break
+            if not matched:
+                continue
 
         # Exact-text deduplication
         text = (meta.get("text") or "").strip()
@@ -165,6 +182,7 @@ def retrieve_context_with_session(
     filter_project_id: Optional[int] = None,
     filter_drawing_name: Optional[str] = None,
     filter_drawing_title: Optional[str] = None,
+    filter_pdf_names: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Retrieve context with optional session-topic enhancement.
@@ -188,4 +206,5 @@ def retrieve_context_with_session(
         filter_project_id    = filter_project_id,
         filter_drawing_name  = filter_drawing_name,
         filter_drawing_title = filter_drawing_title,
+        filter_pdf_names     = filter_pdf_names,
     )

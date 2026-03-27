@@ -105,6 +105,26 @@ _REFERENCE_PREVIOUS_PATTERNS = [
     r"you\s+told\s+me\s+(about|that|the)",
 ]
 
+# ── NEW: Document chat intent patterns ────────────────────────────────────────
+# Matched when user wants to chat with a specific reference document.
+# NOT anchored — works as substring match in longer queries.
+
+_DOCUMENT_CHAT_PATTERNS = [
+    r"(?:chat|talk|discuss|ask)\s+(?:with|about)\s+(?:the\s+)?(?:document|drawing|plan|spec|sheet|pdf)",
+    r"(?:tell me|more)\s+about\s+(?:the\s+)?(.+?)\s+(?:document|drawing|plan|spec|sheet)",
+    r"(?:open|focus|pin|scope|narrow|switch)\s+(?:to|on)\s+(?:the\s+)?(.+?)(?:\s+document|\s+drawing|\s+plan|\s+sheet)?$",
+    r"(?:let me|can i|i want to)\s+(?:chat|talk|discuss|ask)\s+(?:with|about)\s+(.+)",
+    r"(?:verify|check|confirm|review)\s+(?:the\s+)?(?:reference|source)\s+(?:document|drawing)",
+    r"(?:show me|focus on)\s+(?:the\s+)?(.+?)\s+(?:only|specifically)",
+]
+
+_UNPIN_PATTERNS = [
+    r"(?:go back|return|switch back)\s+(?:to\s+)?(?:the\s+)?(?:project|all documents?|full|everything|all)",
+    r"(?:unpin|release|broaden|widen|remove)\s+(?:the\s+)?(?:scope|filter|document|pin)",
+    r"(?:stop|end)\s+(?:chatting|talking|focusing)\s+(?:with|about|on)\s+(?:the\s+)?(?:document|drawing|this)",
+    r"(?:search|look)\s+(?:across|in|through)\s+(?:all|every|the whole)\s+(?:project|documents?)",
+]
+
 # ── NEW: Drawing name pattern ────────────────────────────────────────────────
 # Matches construction drawing names like A0.01, A912, CG-107, M-101, E1.02, S-501
 # Must have at least one letter prefix and at least one digit.
@@ -147,6 +167,8 @@ _COMPILED = {
     "meta_conversation": [re.compile(p, re.IGNORECASE) for p in _META_CONVERSATION_PATTERNS],
     "follow_up":         [re.compile(p, re.IGNORECASE) for p in _FOLLOW_UP_PATTERNS],
     "reference_previous":[re.compile(p, re.IGNORECASE) for p in _REFERENCE_PREVIOUS_PATTERNS],
+    "document_chat":     [re.compile(p, re.IGNORECASE) for p in _DOCUMENT_CHAT_PATTERNS],
+    "unpin_document":    [re.compile(p, re.IGNORECASE) for p in _UNPIN_PATTERNS],
 }
 
 # ── FRIENDLY RESPONSES ───────────────────────────────────────────────────────
@@ -194,7 +216,8 @@ def detect_intent(query: str) -> Tuple[str, str]:
 
     # Check each intent category in priority order
     for intent_type in ("greeting", "small_talk", "thanks", "farewell",
-                        "meta_conversation", "follow_up", "reference_previous"):
+                        "meta_conversation", "follow_up", "reference_previous",
+                        "document_chat", "unpin_document"):
         for pattern in _COMPILED[intent_type]:
             if pattern.search(text):
                 response = _FRIENDLY_RESPONSES.get(intent_type, "")
@@ -229,3 +252,30 @@ def extract_drawing_reference(query: str) -> Tuple[Optional[str], Optional[str]]
         drawing_title = title_match.group(1)
 
     return drawing_name, drawing_title
+
+
+def extract_document_reference(query: str) -> Optional[str]:
+    """
+    Extract a document/drawing name from a 'chat with document' query.
+
+    Returns the extracted name string (to be fuzzy-matched against source_documents),
+    or None if no document reference found.
+    """
+    text = query.strip()
+
+    # Try each document_chat pattern's capture groups
+    for pattern in _COMPILED["document_chat"]:
+        m = pattern.search(text)
+        if m and m.lastindex and m.lastindex >= 1:
+            name = m.group(1).strip().rstrip(".,;:!?")
+            if len(name) >= 2:
+                return name
+
+    # Fallback: check for drawing name pattern
+    drawing_name, drawing_title = extract_drawing_reference(text)
+    if drawing_name:
+        return drawing_name
+    if drawing_title:
+        return drawing_title
+
+    return None
