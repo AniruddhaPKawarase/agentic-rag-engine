@@ -323,50 +323,141 @@ class Orchestrator:
         fallback_used: bool,
         error: Optional[str],
     ) -> dict:
-        """Convert an engine result (any type) to a unified response dict.
+        """Convert an engine result to a response dict matching old RAG QueryResponse schema.
 
-        Uses ``getattr`` throughout so both agentic dataclass results and
-        traditional dict results are handled safely.
+        Traditional engine returns a dict (or Pydantic model) — pass through ALL fields,
+        only inject engine_used/fallback_used/agentic_confidence.
+
+        Agentic engine returns a dataclass — map to the old QueryResponse schema so the
+        frontend gets the same shape regardless of which engine answered.
         """
         if result is None:
             return {
-                "success": error is None,
+                "query": "",
                 "answer": "",
-                "sources": [],
-                "confidence": "low",
+                "rag_answer": None,
+                "web_answer": None,
+                "retrieval_count": 0,
+                "average_score": 0.0,
+                "confidence_score": 0.0,
+                "is_clarification": False,
+                "follow_up_questions": [],
+                "model_used": "",
+                "token_usage": None,
+                "token_tracking": None,
+                "s3_paths": [],
+                "s3_path_count": 0,
+                "source_documents": [],
+                "retrieved_chunks": [],
+                "debug_info": None,
+                "processing_time_ms": elapsed_ms,
+                "project_id": None,
+                "session_id": None,
+                "session_stats": None,
+                "search_mode": "rag",
+                "web_sources": [],
+                "web_source_count": 0,
+                "pin_status": None,
+                "success": error is None,
                 "engine_used": engine,
                 "fallback_used": fallback_used,
                 "agentic_confidence": None,
-                "elapsed_ms": elapsed_ms,
                 "error": error,
             }
 
-        # Handle dict results (traditional engine)
+        # Handle dict results (traditional engine) — pass through ALL fields
         if isinstance(result, dict):
-            return {
-                "success": result.get("success", True),
-                "answer": result.get("answer", ""),
-                "sources": result.get("sources", []),
-                "confidence": result.get("confidence", "medium"),
-                "engine_used": engine,
-                "fallback_used": fallback_used,
-                "agentic_confidence": None,
-                "elapsed_ms": elapsed_ms,
-                "error": error,
-            }
+            resp = dict(result)  # shallow copy, preserve all original fields
+            resp["engine_used"] = engine
+            resp["fallback_used"] = fallback_used
+            resp["agentic_confidence"] = resp.get("agentic_confidence")
+            if "processing_time_ms" not in resp:
+                resp["processing_time_ms"] = elapsed_ms
+            if error:
+                resp["error"] = error
+            return resp
 
-        # Handle dataclass / object results (agentic engine)
+        # Handle Pydantic model results (traditional engine returning model)
+        if hasattr(result, "model_dump"):
+            resp = result.model_dump()
+            resp["engine_used"] = engine
+            resp["fallback_used"] = fallback_used
+            resp["agentic_confidence"] = None
+            if "processing_time_ms" not in resp:
+                resp["processing_time_ms"] = elapsed_ms
+            return resp
+
+        # Handle dataclass / object results (agentic engine) — map to old schema
+        answer = getattr(result, "answer", str(result))
+        sources = getattr(result, "sources", []) or []
+        confidence = getattr(result, "confidence", "medium")
+        cost = getattr(result, "cost_usd", 0.0)
+        steps = getattr(result, "total_steps", 0)
+        model = getattr(result, "model", "")
+
+        # Map confidence string to numeric score
+        conf_map = {"high": 0.9, "medium": 0.6, "low": 0.2}
+        confidence_score = conf_map.get(confidence, 0.5)
+
+        # Build source_documents from agentic sources
+        source_documents = []
+        s3_paths = []
+        for src in sources:
+            if isinstance(src, dict):
+                s3_path = src.get("s3_path", src.get("sourceFile", ""))
+                source_documents.append({
+                    "s3_path": s3_path,
+                    "file_name": src.get("name", src.get("sourceFile", "")),
+                    "display_title": src.get("sheet_number", src.get("name", "")),
+                    "download_url": None,
+                })
+                if s3_path:
+                    s3_paths.append(s3_path)
+            elif isinstance(src, str):
+                source_documents.append({
+                    "s3_path": src,
+                    "file_name": src,
+                    "display_title": src,
+                    "download_url": None,
+                })
+                s3_paths.append(src)
+
         return {
+            "query": "",
+            "answer": answer,
+            "rag_answer": answer,
+            "web_answer": None,
+            "retrieval_count": len(sources),
+            "average_score": confidence_score,
+            "confidence_score": confidence_score,
+            "is_clarification": confidence == "low",
+            "follow_up_questions": [],
+            "model_used": model,
+            "token_usage": {
+                "total_tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+            },
+            "token_tracking": None,
+            "s3_paths": s3_paths,
+            "s3_path_count": len(s3_paths),
+            "source_documents": source_documents,
+            "retrieved_chunks": [],
+            "debug_info": {
+                "agentic_steps": steps,
+                "agentic_cost_usd": cost,
+            },
+            "processing_time_ms": elapsed_ms,
+            "project_id": None,
+            "session_id": None,
+            "session_stats": None,
+            "search_mode": "agentic",
+            "web_sources": [],
+            "web_source_count": 0,
+            "pin_status": None,
             "success": True,
-            "answer": getattr(result, "answer", ""),
-            "sources": getattr(result, "sources", []),
-            "confidence": getattr(result, "confidence", "medium"),
             "engine_used": engine,
             "fallback_used": fallback_used,
-            "agentic_confidence": getattr(result, "confidence", None),
-            "cost_usd": getattr(result, "cost_usd", 0.0),
-            "total_steps": getattr(result, "total_steps", 0),
-            "model": getattr(result, "model", ""),
-            "elapsed_ms": elapsed_ms,
+            "agentic_confidence": confidence,
             "error": error,
         }

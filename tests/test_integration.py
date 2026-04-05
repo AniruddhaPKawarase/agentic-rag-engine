@@ -18,14 +18,22 @@ async def test_agentic_success_no_fallback():
 
     orch = Orchestrator(fallback_enabled=True)
 
-    mock_result = MagicMock()
-    mock_result.answer = "The XVENT THEB-446 models are specified in drawing M-401."
-    mock_result.sources = [{"name": "M-401"}]
-    mock_result.confidence = "high"
-    mock_result.needs_escalation = False
-    mock_result.cost_usd = 0.005
-    mock_result.total_steps = 2
-    mock_result.model = "gpt-4.1"
+    from dataclasses import dataclass, field
+
+    @dataclass
+    class MockAgenticResult:
+        answer: str = ""
+        sources: list = field(default_factory=list)
+        confidence: str = "high"
+        needs_escalation: bool = False
+        cost_usd: float = 0.005
+        total_steps: int = 2
+        model: str = "gpt-4.1"
+
+    mock_result = MockAgenticResult(
+        answer="The XVENT THEB-446 models are specified in drawing M-401.",
+        sources=[{"name": "M-401"}],
+    )
 
     orch.agentic.ensure_initialized = MagicMock()
     orch.agentic.query = AsyncMock(return_value=mock_result)
