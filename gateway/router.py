@@ -1,0 +1,409 @@
+"""
+Gateway Router — all 18 endpoints for the Unified RAG Agent.
+
+The orchestrator is accessed via ``request.app.state.orchestrator``.
+All engine imports are lazy (inside functions, wrapped in try/except)
+so the router works even if one engine fails to import.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import time
+import uuid
+from typing import Any, Optional
+
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+
+from gateway.models import QueryRequest, UnifiedResponse
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _get_orchestrator(request: Request) -> Any:
+    """Retrieve the orchestrator from app state."""
+    return request.app.state.orchestrator
+
+
+def _get_config_summary() -> dict:
+    """Return config summary without secrets."""
+    try:
+        from shared.config import get_config
+        cfg = get_config()
+        return {
+            "host": cfg.host,
+            "port": cfg.port,
+            "log_level": cfg.log_level,
+            "agentic_model": cfg.agentic_model,
+            "agentic_model_fallback": cfg.agentic_model_fallback,
+            "agentic_max_steps": cfg.agentic_max_steps,
+            "traditional_model": cfg.traditional_model,
+            "traditional_embedding_model": cfg.traditional_embedding_model,
+            "fallback_enabled": cfg.fallback_enabled,
+            "fallback_timeout_seconds": cfg.fallback_timeout_seconds,
+            "faiss_lazy_load": cfg.faiss_lazy_load,
+            "storage_backend": cfg.storage_backend,
+            "mongo_db": cfg.mongo_db,
+        }
+    except Exception as exc:
+        logger.warning("Failed to load config summary: %s", exc)
+        return {"error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Root / Info
+# ---------------------------------------------------------------------------
+
+@router.get("/")
+async def root() -> dict:
+    """API info and available endpoints."""
+    return {
+        "service": "Unified RAG Agent",
+        "version": "1.0.0",
+        "engines": ["agentic", "traditional"],
+        "endpoints": {
+            "query": "POST /query",
+            "stream": "POST /query/stream",
+            "quick_query": "POST /quick-query",
+            "web_search": "POST /web-search",
+            "health": "GET /health",
+            "config": "GET /config",
+            "sessions": "GET /sessions",
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Health + Config
+# ---------------------------------------------------------------------------
+
+@router.get("/health")
+async def health(request: Request) -> dict:
+    """Check health of both engines."""
+    orchestrator = _get_orchestrator(request)
+    status = {
+        "status": "healthy",
+        "engines": {
+            "agentic": {
+                "initialized": orchestrator.agentic._initialized,
+            },
+            "traditional": {
+                "faiss_loaded": orchestrator.traditional.is_loaded,
+            },
+        },
+        "fallback_enabled": orchestrator.fallback_enabled,
+    }
+    return status
+
+
+@router.get("/config")
+async def config_endpoint() -> dict:
+    """Return config summary (no secrets)."""
+    return _get_config_summary()
+
+
+# ---------------------------------------------------------------------------
+# Core Query Endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/query")
+async def query(request: Request, body: QueryRequest) -> dict:
+    """Run a query through the orchestrator (agentic-first with fallback)."""
+    orchestrator = _get_orchestrator(request)
+    result = await orchestrator.query(
+        query=body.query,
+        project_id=body.project_id,
+        engine=body.engine,
+        session_id=body.session_id,
+        set_id=body.set_id,
+        conversation_history=body.conversation_history,
+        search_mode=body.search_mode,
+        generate_document=body.generate_document,
+        filter_source_type=body.filter_source_type,
+        filter_drawing_name=body.filter_drawing_name,
+    )
+    return result
+
+
+@router.post("/query/stream")
+async def query_stream(request: Request, body: QueryRequest) -> StreamingResponse:
+    """SSE streaming endpoint — tries agentic stream, falls back to traditional."""
+
+    async def event_generator() -> Any:
+        orchestrator = _get_orchestrator(request)
+        try:
+            # Attempt agentic streaming
+            from agentic.core.agent import run_agent_stream  # type: ignore[import-untyped]
+            async for chunk in run_agent_stream(
+                query=body.query,
+                project_id=body.project_id,
+                set_id=body.set_id,
+            ):
+                yield f"data: {json.dumps(chunk)}\n\n"
+        except (ImportError, AttributeError):
+            # Fallback: run full query and stream the result as a single event
+            logger.info("Agentic streaming not available, falling back to full query")
+            try:
+                result = await orchestrator.query(
+                    query=body.query,
+                    project_id=body.project_id,
+                    engine=body.engine,
+                    session_id=body.session_id,
+                )
+                yield f"data: {json.dumps(result)}\n\n"
+            except Exception as exc:
+                yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/quick-query")
+async def quick_query(request: Request, body: QueryRequest) -> dict:
+    """Simplified query — returns only answer + sources + confidence."""
+    orchestrator = _get_orchestrator(request)
+    result = await orchestrator.query(
+        query=body.query,
+        project_id=body.project_id,
+        engine=body.engine,
+        session_id=body.session_id,
+        set_id=body.set_id,
+    )
+    return {
+        "answer": result.get("answer", ""),
+        "sources": result.get("sources", []),
+        "confidence": result.get("confidence", "low"),
+        "engine_used": result.get("engine_used", "unknown"),
+    }
+
+
+@router.post("/web-search")
+async def web_search(request: Request, body: QueryRequest) -> dict:
+    """Delegate to traditional engine's web search capability."""
+    try:
+        from traditional.rag.api.generation_unified import generate_response  # type: ignore[import-untyped]
+        result = await asyncio.to_thread(
+            generate_response,
+            query=body.query,
+            project_id=body.project_id,
+            session_id=body.session_id,
+            search_mode="web",
+        )
+        return {"success": True, "result": result}
+    except ImportError:
+        return {"success": False, "error": "Traditional engine not available for web search"}
+    except Exception as exc:
+        logger.error("Web search failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Session Endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/sessions/create")
+async def create_session(request: Request, body: dict = {}) -> dict:
+    """Create a new session."""
+    try:
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
+        session_id = mm.create_session(
+            project_id=body.get("project_id"),
+        )
+        return {"success": True, "session_id": session_id}
+    except ImportError:
+        session_id = str(uuid.uuid4())
+        logger.warning("MemoryManager not available, returning stub session")
+        return {"success": True, "session_id": session_id, "stub": True}
+    except Exception as exc:
+        logger.error("Session creation failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+
+
+@router.get("/sessions")
+async def list_sessions(request: Request) -> dict:
+    """List all sessions."""
+    try:
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
+        sessions = mm.list_sessions()
+        return {"success": True, "sessions": sessions}
+    except ImportError:
+        return {"success": True, "sessions": [], "stub": True}
+    except Exception as exc:
+        logger.error("List sessions failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+
+
+@router.get("/sessions/{session_id}/stats")
+async def session_stats(request: Request, session_id: str) -> dict:
+    """Get session stats including engine usage."""
+    try:
+        from shared.session.manager import get_session_stats_extended
+        stats = get_session_stats_extended(session_id)
+        return {"success": True, **stats}
+    except ImportError:
+        return {"success": True, "session_id": session_id, "stub": True}
+    except Exception as exc:
+        logger.error("Session stats failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+
+
+@router.get("/sessions/{session_id}/conversation")
+async def session_conversation(request: Request, session_id: str) -> dict:
+    """Get conversation history for a session."""
+    try:
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
+        history = mm.get_conversation(session_id)
+        return {"success": True, "session_id": session_id, "conversation": history}
+    except ImportError:
+        return {"success": True, "session_id": session_id, "conversation": [], "stub": True}
+    except Exception as exc:
+        logger.error("Get conversation failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+
+
+@router.post("/sessions/{session_id}/update")
+async def update_session(request: Request, session_id: str, body: dict = {}) -> dict:
+    """Update session context."""
+    try:
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
+        mm.update_session(session_id, body)
+        return {"success": True, "session_id": session_id}
+    except ImportError:
+        return {"success": True, "session_id": session_id, "stub": True}
+    except Exception as exc:
+        logger.error("Update session failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(request: Request, session_id: str) -> dict:
+    """Delete a session."""
+    try:
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
+        mm.delete_session(session_id)
+        return {"success": True, "session_id": session_id, "deleted": True}
+    except ImportError:
+        return {"success": True, "session_id": session_id, "deleted": True, "stub": True}
+    except Exception as exc:
+        logger.error("Delete session failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+
+
+@router.post("/sessions/{session_id}/pin-document")
+async def pin_document(request: Request, session_id: str, body: dict = {}) -> dict:
+    """Pin documents to a session for persistent context."""
+    try:
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
+        mm.pin_document(session_id, body.get("document_ids", []))
+        return {"success": True, "session_id": session_id, "pinned": True}
+    except ImportError:
+        return {"success": True, "session_id": session_id, "pinned": True, "stub": True}
+    except Exception as exc:
+        logger.error("Pin document failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+
+
+@router.delete("/sessions/{session_id}/pin-document")
+async def unpin_document(request: Request, session_id: str, body: dict = {}) -> dict:
+    """Unpin documents from a session."""
+    try:
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
+        mm.unpin_document(session_id, body.get("document_ids", []))
+        return {"success": True, "session_id": session_id, "unpinned": True}
+    except ImportError:
+        return {"success": True, "session_id": session_id, "unpinned": True, "stub": True}
+    except Exception as exc:
+        logger.error("Unpin document failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Debug Endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/test-retrieve")
+async def test_retrieve(
+    request: Request,
+    query: str = "test",
+    project_id: int = 7166,
+    top_k: int = 5,
+) -> dict:
+    """Test FAISS retrieval without running the full pipeline."""
+    try:
+        from traditional.rag.retrieval.loaders import _load_project  # type: ignore[import-untyped]
+        from traditional.retrieve import multi_project_retrieve  # type: ignore[import-untyped]
+
+        _load_project(project_id)
+        results = multi_project_retrieve(query, [project_id], top_k=top_k)
+        return {
+            "success": True,
+            "query": query,
+            "project_id": project_id,
+            "results_count": len(results),
+            "results": results[:top_k],
+        }
+    except ImportError as exc:
+        return {"success": False, "error": f"Traditional engine not available: {exc}"}
+    except Exception as exc:
+        logger.error("Test retrieve failed: %s", exc)
+        return {"success": False, "error": str(exc)}
+
+
+@router.get("/debug-pipeline")
+async def debug_pipeline(request: Request) -> dict:
+    """Debug info for both engines."""
+    orchestrator = _get_orchestrator(request)
+    debug_info: dict[str, Any] = {
+        "orchestrator": {
+            "fallback_enabled": orchestrator.fallback_enabled,
+            "fallback_timeout": orchestrator.fallback_timeout,
+        },
+        "agentic": {
+            "initialized": orchestrator.agentic._initialized,
+        },
+        "traditional": {
+            "faiss_loaded": orchestrator.traditional.is_loaded,
+        },
+    }
+
+    # Try to get agentic module info
+    try:
+        import agentic  # type: ignore[import-untyped]
+        debug_info["agentic"]["module_path"] = str(agentic.__file__)
+    except ImportError:
+        debug_info["agentic"]["module_path"] = "not importable"
+
+    # Try to get traditional module info
+    try:
+        import traditional  # type: ignore[import-untyped]
+        debug_info["traditional"]["module_path"] = str(traditional.__file__)
+    except ImportError:
+        debug_info["traditional"]["module_path"] = "not importable"
+
+    return debug_info

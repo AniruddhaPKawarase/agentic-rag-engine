@@ -1,5 +1,4 @@
 """API routes, exception handlers, and startup hooks — v2."""
-import asyncio
 import datetime
 import traceback
 from typing import Optional
@@ -73,7 +72,7 @@ async def health_check(project_id: Optional[int] = Query(None, description="Proj
     """Health check endpoint"""
     openai_available = False
     try:
-        client.models.list()
+        client.models.list(limit=1)
         openai_available = True
     except Exception as e:
         print(f"OpenAI health check failed: {e}")
@@ -91,13 +90,6 @@ async def health_check(project_id: Optional[int] = Query(None, description="Proj
                 index_vectors = config.index.ntotal
             if config.metadata:
                 metadata_records = len(config.metadata)
-        else:
-            # Aggregate across all loaded projects
-            for pid, config in PROJECTS.items():
-                if config.loaded and config.index is not None:
-                    index_vectors += config.index.ntotal
-                if config.metadata:
-                    metadata_records += len(config.metadata)
     except Exception as e:
         print(f"Retrieval health check failed: {e}")
 
@@ -149,8 +141,7 @@ async def query_documents(request: QueryRequest):
     try:
         print(f"\n📨 Received query: '{request.query}' | mode={request.search_mode}")
 
-        result = await asyncio.to_thread(
-            generate_unified_answer,
+        result = generate_unified_answer(
             user_query=request.query,
             search_mode=request.search_mode,
             top_k=request.top_k,
@@ -164,6 +155,8 @@ async def query_documents(request: QueryRequest):
             debug=request.debug,
             session_id=request.session_id,
             create_new_session=request.create_new_session,
+            pin_documents=request.pin_documents,
+            unpin=request.unpin,
         )
 
         return QueryResponse(**result)
@@ -185,8 +178,7 @@ async def quick_query_endpoint(
 ):
     """Quick query with simplified parameters for UI."""
     try:
-        result = await asyncio.to_thread(
-            generate_unified_answer,
+        result = generate_unified_answer(
             user_query=query,
             search_mode=search_mode,
             top_k=5,
@@ -250,6 +242,8 @@ async def query_stream(request: QueryRequest):
             project_id=request.project_id,
             session_id=request.session_id,
             create_new_session=request.create_new_session,
+            pin_documents=request.pin_documents,
+            unpin=request.unpin,
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -262,8 +256,7 @@ async def query_stream(request: QueryRequest):
 async def web_search_endpoint(request: WebSearchRequest):
     """Generate an answer using web search."""
     try:
-        result = await asyncio.to_thread(
-            generate_web_search_answer,
+        result = generate_web_search_answer(
             user_query=request.query,
             temperature=request.temperature,
             max_tokens=request.max_tokens,
@@ -387,8 +380,50 @@ async def get_session_conversation(session_id: str):
             "project_id": session.context.project_id,
             "filter_source_type": session.context.filter_source_type,
             "custom_instructions": session.context.custom_instructions,
+            "pinned_documents": getattr(session.context, 'pinned_documents', []),
+            "pinned_titles": getattr(session.context, 'pinned_titles', []),
         },
     }
+
+
+# ── Document Pin endpoints ────────────────────────────────────────────────────
+
+@app.post("/sessions/{session_id}/pin-document")
+async def pin_document(session_id: str, body: dict = Body(...)):
+    """Pin specific documents for document-scoped chat."""
+    if not MEMORY_MANAGER:
+        raise HTTPException(status_code=501, detail="Memory manager not available")
+    session = MEMORY_MANAGER.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    pdf_names = body.get("pdf_names", [])
+    titles = body.get("document_titles", [])
+    if not pdf_names:
+        raise HTTPException(status_code=400, detail="pdf_names is required")
+
+    session.context.pinned_documents = pdf_names
+    session.context.pinned_titles = titles if titles else pdf_names
+    return {
+        "status": "pinned",
+        "session_id": session_id,
+        "pinned_documents": pdf_names,
+        "pinned_titles": session.context.pinned_titles,
+    }
+
+
+@app.delete("/sessions/{session_id}/pin-document")
+async def unpin_document(session_id: str):
+    """Unpin all documents — return to full project scope."""
+    if not MEMORY_MANAGER:
+        raise HTTPException(status_code=501, detail="Memory manager not available")
+    session = MEMORY_MANAGER.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session.context.pinned_documents = []
+    session.context.pinned_titles = []
+    return {"status": "unpinned", "session_id": session_id}
 
 
 # ── Debug / test endpoints ────────────────────────────────────────────────────

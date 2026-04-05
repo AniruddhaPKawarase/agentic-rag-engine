@@ -55,7 +55,7 @@ def _make_config(pid: int) -> ProjectConfig:
 
 
 PROJECTS: Dict[int, ProjectConfig] = {
-    pid: _make_config(pid) for pid in [7166, 7201, 7212, 7222, 7223, 7277, 7292]
+    pid: _make_config(pid) for pid in [7166, 7201, 7212, 7222, 7223, 7277, 7292, 7325]
 }
 
 # Backward-compat for code that reads _current_project_id
