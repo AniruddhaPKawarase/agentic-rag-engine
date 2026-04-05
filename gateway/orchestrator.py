@@ -206,20 +206,38 @@ class Orchestrator:
         session_id: Optional[str] = None,
         set_id: Optional[int] = None,
         conversation_history: Optional[list] = None,
+        search_mode: Optional[str] = None,
         **kwargs: Any,
     ) -> dict:
         """Route a query through the appropriate engine(s).
 
+        Parameters
+        ----------
+        search_mode : str or None
+            ``"rag"``  — project data only (default, AgenticRAG MongoDB tools)
+            ``"web"``  — web search only (OpenAI web_search tool)
+            ``"hybrid"`` — BOTH in parallel: rag_answer from project data +
+                           web_answer from web search, returned as two fields.
+
         Flow
         ----
-        1. If ``engine="traditional"`` -- skip agentic, go straight to FAISS.
-        2. Otherwise try agentic first.
-        3. If ``engine="agentic"`` or fallback is disabled -- return as-is.
-        4. Evaluate agentic result via ``_should_fallback``.
-        5. If fallback needed -- run traditional with timeout.
-        6. If traditional also fails -- return whatever agentic produced.
+        1. If ``search_mode="web"`` — run web search only.
+        2. If ``search_mode="hybrid"`` — run agentic + web in parallel.
+        3. If ``engine="traditional"`` — skip agentic, go straight to FAISS.
+        4. Otherwise try agentic first, fallback to traditional if needed.
         """
         start = time.monotonic()
+        search_mode = search_mode or "rag"
+
+        # --- Web-only mode ---
+        if search_mode == "web":
+            return await self._run_web_search(query, start)
+
+        # --- Hybrid mode: agentic + web in parallel ---
+        if search_mode == "hybrid":
+            return await self._run_hybrid(
+                query, project_id, set_id, conversation_history, start,
+            )
 
         # --- Direct traditional request ---
         if engine == "traditional":
@@ -290,6 +308,181 @@ class Orchestrator:
                 fallback_used=False,
                 error=f"Fallback failed: {exc}",
             )
+
+    # ------------------------------------------------------------------
+    # Web search (shared by web-only and hybrid modes)
+    # ------------------------------------------------------------------
+
+    async def _run_web_search(self, query: str, start: float) -> dict:
+        """Run web search only using traditional engine's web_search service."""
+        try:
+            from traditional.services.web_search import web_search
+            result = await asyncio.to_thread(web_search, query)
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            return {
+                "query": query,
+                "answer": result.get("answer", ""),
+                "rag_answer": None,
+                "web_answer": result.get("answer", ""),
+                "retrieval_count": 0,
+                "average_score": 0.0,
+                "confidence_score": 0.8,
+                "is_clarification": False,
+                "follow_up_questions": [],
+                "model_used": "gpt-4.1",
+                "token_usage": None,
+                "token_tracking": None,
+                "s3_paths": [],
+                "s3_path_count": 0,
+                "source_documents": [],
+                "retrieved_chunks": [],
+                "debug_info": None,
+                "processing_time_ms": elapsed_ms,
+                "project_id": None,
+                "session_id": None,
+                "session_stats": None,
+                "search_mode": "web",
+                "web_sources": result.get("sources", []),
+                "web_source_count": len(result.get("sources", [])),
+                "pin_status": None,
+                "success": True,
+                "engine_used": "agentic",
+                "fallback_used": False,
+                "agentic_confidence": None,
+                "error": None,
+            }
+        except Exception as exc:
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            logger.error("Web search failed: %s", exc)
+            return self._build_response(
+                result=None, engine="agentic",
+                elapsed_ms=elapsed_ms, fallback_used=False,
+                error=f"Web search failed: {exc}",
+            )
+
+    async def _run_hybrid(
+        self,
+        query: str,
+        project_id: int,
+        set_id: Optional[int],
+        conversation_history: Optional[list],
+        start: float,
+    ) -> dict:
+        """Run agentic (project data) + web search in PARALLEL.
+
+        Returns both ``rag_answer`` and ``web_answer`` separately.
+        """
+        # Launch both in parallel
+        agentic_task = asyncio.create_task(
+            self.agentic.query(
+                query=query, project_id=project_id,
+                set_id=set_id, conversation_history=conversation_history,
+            )
+        )
+        web_task = asyncio.create_task(
+            asyncio.to_thread(self._sync_web_search, query)
+        )
+
+        # Wait for both (don't fail if one errors)
+        agentic_result = None
+        web_result = None
+        try:
+            agentic_result = await agentic_task
+        except Exception as exc:
+            logger.warning("Hybrid: agentic failed: %s", exc)
+        try:
+            web_result = await web_task
+        except Exception as exc:
+            logger.warning("Hybrid: web search failed: %s", exc)
+
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+
+        # Extract answers
+        rag_answer = getattr(agentic_result, "answer", None) if agentic_result else None
+        web_answer = web_result.get("answer", None) if web_result else None
+        sources = getattr(agentic_result, "sources", []) if agentic_result else []
+        web_sources = web_result.get("sources", []) if web_result else []
+        confidence = getattr(agentic_result, "confidence", "low") if agentic_result else "low"
+        conf_map = {"high": 0.9, "medium": 0.6, "low": 0.2}
+
+        # Build combined answer
+        combined = ""
+        if rag_answer:
+            combined += f"**From Project Data:**\n{rag_answer}"
+        if web_answer:
+            if combined:
+                combined += "\n\n---\n\n"
+            combined += f"**From Web Search:**\n{web_answer}"
+        if not combined:
+            combined = "No results from either project data or web search."
+
+        # Build source_documents from agentic
+        source_documents = []
+        s3_paths = []
+        for src in (sources or []):
+            if isinstance(src, dict):
+                s3_path = src.get("s3_path", src.get("sourceFile", ""))
+                source_documents.append({
+                    "s3_path": s3_path,
+                    "file_name": src.get("name", src.get("sourceFile", "")),
+                    "display_title": src.get("sheet_number", src.get("name", "")),
+                    "download_url": None,
+                })
+                if s3_path:
+                    s3_paths.append(s3_path)
+            elif isinstance(src, str):
+                source_documents.append({
+                    "s3_path": src, "file_name": src,
+                    "display_title": src, "download_url": None,
+                })
+                s3_paths.append(src)
+
+        return {
+            "query": query,
+            "answer": combined,
+            "rag_answer": rag_answer,
+            "web_answer": web_answer,
+            "retrieval_count": len(sources),
+            "average_score": conf_map.get(confidence, 0.5),
+            "confidence_score": conf_map.get(confidence, 0.5),
+            "is_clarification": False,
+            "follow_up_questions": [],
+            "model_used": getattr(agentic_result, "model", "gpt-4.1") if agentic_result else "gpt-4.1",
+            "token_usage": None,
+            "token_tracking": None,
+            "s3_paths": s3_paths,
+            "s3_path_count": len(s3_paths),
+            "source_documents": source_documents,
+            "retrieved_chunks": [],
+            "debug_info": {
+                "agentic_steps": getattr(agentic_result, "total_steps", 0) if agentic_result else 0,
+                "agentic_cost_usd": getattr(agentic_result, "cost_usd", 0.0) if agentic_result else 0.0,
+                "web_sources_count": len(web_sources),
+            },
+            "processing_time_ms": elapsed_ms,
+            "project_id": project_id,
+            "session_id": None,
+            "session_stats": None,
+            "search_mode": "hybrid",
+            "web_sources": web_sources,
+            "web_source_count": len(web_sources),
+            "pin_status": None,
+            "success": True,
+            "engine_used": "agentic",
+            "fallback_used": False,
+            "agentic_confidence": confidence,
+            "error": None,
+        }
+
+    @staticmethod
+    def _sync_web_search(query: str) -> dict:
+        """Synchronous web search wrapper for asyncio.to_thread."""
+        try:
+            from traditional.services.web_search import web_search
+            return web_search(query)
+        except Exception as exc:
+            logger.error("Sync web search error: %s", exc)
+            return {"answer": None, "sources": []}
 
     async def _run_traditional(
         self,

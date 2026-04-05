@@ -163,7 +163,7 @@ Content-Type: application/json
 | `session_id` | string | No | Reuse existing session |
 | `engine` | string | No | Force engine: `"agentic"`, `"traditional"`, or `null` (auto) |
 | `set_id` | int | No | MongoDB set filter (AgenticRAG only) |
-| `search_mode` | string | No | `"rag"`, `"web"`, `"hybrid"` (traditional only) |
+| `search_mode` | string | No | `"rag"` (project data only, default), `"web"` (web search only), `"hybrid"` (both in parallel → rag_answer + web_answer) |
 | `conversation_history` | list | No | Previous messages for sessionless mode |
 | `generate_document` | bool | No | Generate document (default true) |
 | `filter_source_type` | string | No | `"drawing"` or `"specification"` |
@@ -323,6 +323,56 @@ Content-Type: application/json
     ]
 }
 ```
+
+---
+
+### Example: Web Search Only
+
+```json
+POST http://54.197.189.113:8001/query
+Content-Type: application/json
+
+{
+    "query": "ASHRAE 90.1 energy code requirements for HVAC insulation",
+    "project_id": 2361,
+    "search_mode": "web"
+}
+```
+
+**Response:** `web_answer` populated, `rag_answer` = null, `search_mode` = "web"
+
+---
+
+### Example: Hybrid (Project Data + Web Search in Parallel)
+
+```json
+POST http://54.197.189.113:8001/query
+Content-Type: application/json
+
+{
+    "query": "What XVENT exhaust termination models are recommended and what are the latest industry standards for exhaust terminations?",
+    "project_id": 2361,
+    "search_mode": "hybrid"
+}
+```
+
+**Response:**
+```json
+{
+    "query": "What XVENT exhaust termination models...",
+    "answer": "**From Project Data:**\nThe XVENT models specified are OHEB-44-*, OHEB-46-*...\n\n---\n\n**From Web Search:**\nAccording to ASHRAE 62.1-2022, exhaust terminations must be...",
+    "rag_answer": "The XVENT models specified are OHEB-44-*, OHEB-46-*...",
+    "web_answer": "According to ASHRAE 62.1-2022, exhaust terminations must be...",
+    "search_mode": "hybrid",
+    "web_sources": [{"title": "ASHRAE 62.1", "url": "https://..."}],
+    "web_source_count": 3,
+    "source_documents": [{"s3_path": "...", "file_name": "M-401...", "display_title": "M-401"}],
+    "engine_used": "agentic",
+    "...": "..."
+}
+```
+
+**Key:** In hybrid mode, `rag_answer` has the project-specific answer and `web_answer` has the web search answer. The combined `answer` field has both with clear headers.
 
 ---
 
