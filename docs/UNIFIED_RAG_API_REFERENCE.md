@@ -169,30 +169,82 @@ Content-Type: application/json
 | `filter_source_type` | string | No | `"drawing"` or `"specification"` |
 | `filter_drawing_name` | string | No | Filter by specific drawing name |
 
-**Response (200):**
+**Response (200) — matches old QueryResponse schema:**
 ```json
 {
-    "success": true,
-    "answer": "The XVENT models specified in the mechanical drawings are:\n\n- XVENT Model OHEB-44-* for all 4\"/4\" double exhaust terminations\n- XVENT Model OHEB-46-*\n\n[Source: M-401, M-402]",
-    "sources": [
-        {"name": "M-401", "type": "drawingVision"},
-        {"name": "M-402", "type": "drawingVision"}
+    "query": "",
+    "answer": "The XVENT models specified in the project are:\n\n- XVENT Model OHEB-44-* ...",
+    "rag_answer": "The XVENT models specified in the project are:\n\n- XVENT Model OHEB-44-* ...",
+    "web_answer": null,
+    "retrieval_count": 10,
+    "average_score": 0.9,
+    "confidence_score": 0.9,
+    "is_clarification": false,
+    "follow_up_questions": [],
+    "model_used": "gpt-4.1",
+    "token_usage": {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0},
+    "token_tracking": null,
+    "s3_paths": ["0104202614084657M100MECHANICALLOWERLEVELPLAN1-1.pdf", "..."],
+    "s3_path_count": 10,
+    "source_documents": [
+        {
+            "s3_path": "0104202614084657M100MECHANICALLOWERLEVELPLAN1-1.pdf",
+            "file_name": "0104202614084657M100MECHANICALLOWERLEVELPLAN1-1.pdf",
+            "display_title": "0104202614084657M100MECHANICALLOWERLEVELPLAN1-1.pdf",
+            "download_url": null
+        }
     ],
-    "confidence": "high",
+    "retrieved_chunks": [],
+    "debug_info": {"agentic_steps": 2, "agentic_cost_usd": 0.0},
+    "processing_time_ms": 8104,
+    "project_id": null,
+    "session_id": null,
+    "session_stats": null,
+    "search_mode": "agentic",
+    "web_sources": [],
+    "web_source_count": 0,
+    "pin_status": null,
+    "success": true,
     "engine_used": "agentic",
     "fallback_used": false,
-    "agentic_confidence": null,
-    "cost_usd": 0.019,
-    "elapsed_ms": 3421,
-    "total_steps": 3,
-    "model": "gpt-4.1"
+    "agentic_confidence": "high",
+    "error": null
 }
 ```
 
-**Key response fields:**
-- `engine_used`: `"agentic"` | `"traditional"` | `"traditional_fallback"`
-- `fallback_used`: `true` if agentic failed and traditional answered
-- `agentic_confidence`: original agentic confidence (only when fallback_used=true)
+**Response schema — all fields (matches old QueryResponse):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `query` | string | Original query text |
+| `answer` | string | Combined answer |
+| `rag_answer` | string/null | RAG-only answer |
+| `web_answer` | string/null | Web-only answer |
+| `retrieval_count` | int | Number of sources found |
+| `average_score` | float | Average retrieval similarity (0-1) |
+| `confidence_score` | float | Confidence score (0-1) |
+| `is_clarification` | bool | True if answer is a clarification request |
+| `follow_up_questions` | list[str] | Suggested follow-up questions |
+| `model_used` | string | LLM model used |
+| `token_usage` | dict | Token counts (prompt, completion, total) |
+| `token_tracking` | dict/null | Granular per-stage token tracking |
+| `s3_paths` | list[str] | S3 paths of source documents |
+| `s3_path_count` | int | Count of unique S3 paths |
+| `source_documents` | list[dict] | Structured source docs (s3_path, file_name, display_title, download_url) |
+| `retrieved_chunks` | list[dict] | Retrieved context chunks with similarity scores |
+| `debug_info` | dict/null | Debug details (agentic_steps, agentic_cost_usd) |
+| `processing_time_ms` | int | Total processing time |
+| `project_id` | int/null | Project ID queried |
+| `session_id` | string/null | Session ID |
+| `session_stats` | dict/null | Session statistics |
+| `search_mode` | string | `"agentic"`, `"rag"`, `"web"`, `"hybrid"`, `"greeting"` |
+| `web_sources` | list[dict] | Web search sources |
+| `web_source_count` | int | Count of web sources |
+| `pin_status` | dict/null | Document pin status (traditional only) |
+| `engine_used` | string | `"agentic"` / `"traditional"` / `"traditional_fallback"` (NEW) |
+| `fallback_used` | bool | True if agentic failed and traditional answered (NEW) |
+| `agentic_confidence` | string/null | Original agentic confidence when fallback used (NEW) |
+| `error` | string/null | Error message if any (NEW) |
 
 ---
 
