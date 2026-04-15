@@ -198,8 +198,16 @@ class AgenticEngine:
         project_id: int,
         set_id: Optional[int] = None,
         conversation_history: Optional[list] = None,
+        scope: Optional[dict] = None,
     ) -> Any:
-        """Run the agentic RAG pipeline in a thread (blocking call)."""
+        """Run the agentic RAG pipeline in a thread (blocking call).
+
+        Parameters
+        ----------
+        scope : dict or None
+            Document scope filter. When set, injected into every tool call
+            to restrict results to a specific drawingTitle/drawingName.
+        """
         self.ensure_initialized()
         from agentic.core.agent import run_agent  # type: ignore[import-untyped]
 
@@ -209,6 +217,7 @@ class AgenticEngine:
             project_id=project_id,
             set_id=set_id,
             conversation_history=conversation_history,
+            scope=scope,
         )
         return result
 
@@ -320,20 +329,14 @@ class Orchestrator:
     ) -> dict:
         """Route a query through the appropriate engine(s).
 
-        Parameters
-        ----------
-        search_mode : str or None
-            ``"rag"``  — project data only (default, AgenticRAG MongoDB tools)
-            ``"web"``  — web search only (OpenAI web_search tool)
-            ``"hybrid"`` — BOTH in parallel: rag_answer from project data +
-                           web_answer from web search, returned as two fields.
-
         Flow
         ----
         1. If ``search_mode="web"`` — run web search only.
         2. If ``search_mode="hybrid"`` — run agentic + web in parallel.
-        3. If ``engine="traditional"`` — skip agentic, go straight to FAISS.
-        4. Otherwise try agentic first, fallback to traditional if needed.
+        3. Check session scope — if active, inject scope filters into agentic.
+        4. Try agentic first.
+        5. If agentic fails → document discovery (list available drawing titles)
+           instead of blind FAISS fallback.
         """
         start = time.monotonic()
         search_mode = search_mode or "rag"
@@ -348,13 +351,29 @@ class Orchestrator:
                 query, project_id, set_id, conversation_history, start,
             )
 
-        # --- Direct traditional request ---
+        # --- Direct traditional request (backward compat, not used in scoped mode) ---
         if engine == "traditional":
             return await self._run_traditional(
                 query, project_id, session_id, start, **kwargs,
             )
 
-        # --- Try agentic ---
+        # --- Resolve session scope ---
+        scope = None
+        if session_id:
+            try:
+                from shared.session.manager import get_document_scope
+                scope_state = get_document_scope(session_id)
+                if scope_state.get("is_active"):
+                    scope = scope_state
+                    logger.info(
+                        "Query scoped to: %s (%s)",
+                        scope.get("drawing_title") or scope.get("section_title"),
+                        scope.get("document_type"),
+                    )
+            except ImportError:
+                pass
+
+        # --- Try agentic (with scope if active) ---
         agentic_result = None
         agentic_error: Optional[str] = None
         try:
@@ -363,6 +382,7 @@ class Orchestrator:
                 project_id=project_id,
                 set_id=set_id,
                 conversation_history=conversation_history,
+                scope=scope,
             )
         except Exception as exc:
             agentic_error = str(exc)
@@ -370,53 +390,168 @@ class Orchestrator:
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
 
-        # --- If forced agentic or fallback disabled, return as-is ---
-        if engine == "agentic" or not self.fallback_enabled:
-            return self._build_response(
-                result=agentic_result,
-                engine="agentic",
-                elapsed_ms=elapsed_ms,
-                fallback_used=False,
-                error=agentic_error,
-            )
+        # --- Touch scope timer if active ---
+        if scope and session_id:
+            try:
+                from shared.session.manager import get_meta
+                get_meta(session_id).scope.touch()
+            except ImportError:
+                pass
 
-        # --- Evaluate and possibly fallback ---
+        # --- Success: agentic answered well ---
         if not _should_fallback(agentic_result):
-            return self._build_response(
+            resp = self._build_response(
                 result=agentic_result,
                 engine="agentic",
                 elapsed_ms=elapsed_ms,
                 fallback_used=False,
                 error=None,
             )
+            if scope:
+                resp["scoped_to"] = scope.get("drawing_title") or scope.get("section_title")
+            return resp
 
-        # --- Fallback to traditional ---
+        # --- Agentic failed: document discovery instead of FAISS fallback ---
         agentic_confidence = getattr(agentic_result, "confidence", None)
         logger.info(
-            "Falling back to traditional RAG (agentic confidence=%s)",
+            "Agentic insufficient (confidence=%s) — running document discovery",
             agentic_confidence,
         )
-        try:
-            trad_response = await asyncio.wait_for(
-                self._run_traditional(
-                    query, project_id, session_id, start, **kwargs,
-                ),
-                timeout=self.fallback_timeout,
-            )
-            trad_response["fallback_used"] = True
-            trad_response["agentic_confidence"] = agentic_confidence
-            return trad_response
-        except Exception as exc:
-            logger.warning("Traditional fallback also failed: %s", exc)
-            # Return whatever agentic had
-            elapsed_ms = int((time.monotonic() - start) * 1000)
-            return self._build_response(
+
+        # If already scoped and failed → report "doc doesn't have this info"
+        if scope:
+            scoped_name = scope.get("drawing_title") or scope.get("section_title")
+            resp = self._build_response(
                 result=agentic_result,
                 engine="agentic",
                 elapsed_ms=elapsed_ms,
                 fallback_used=False,
-                error="Both engines encountered issues. Please try again.",
+                error=None,
             )
+            resp["answer"] = (
+                f"The document '{scoped_name}' does not contain information "
+                f"about this topic. You can try a different document or "
+                f"return to full project scope to search all documents."
+            )
+            resp["scoped_to"] = scoped_name
+            resp["needs_document_selection"] = True
+            # Discover other documents for suggestions
+            available = await self._discover_documents(project_id, set_id)
+            resp["available_documents"] = available
+            return resp
+
+        # Not scoped: run document discovery for the full project
+        resp = self._build_response(
+            result=agentic_result,
+            engine="agentic",
+            elapsed_ms=elapsed_ms,
+            fallback_used=False,
+            error=agentic_error,
+        )
+        if not resp.get("answer") or len(resp.get("answer", "")) < 20:
+            resp["answer"] = (
+                "I couldn't find specific information in a broad search. "
+                "Your project has the following document groups — try "
+                "selecting one for a focused search."
+            )
+        resp["needs_document_selection"] = True
+        resp["agentic_confidence"] = agentic_confidence
+        available = await self._discover_documents(project_id, set_id)
+        resp["available_documents"] = available
+        return resp
+
+    # ------------------------------------------------------------------
+    # Document discovery
+    # ------------------------------------------------------------------
+
+    async def _discover_documents(
+        self,
+        project_id: int,
+        set_id: Optional[int] = None,
+    ) -> list[dict]:
+        """Fetch unique drawing titles + spec titles for document discovery.
+
+        Uses the title cache (1hr TTL) to avoid re-aggregating on every query.
+        Returns a merged list of drawings and specifications.
+        """
+        try:
+            from gateway.title_cache import get_cached_titles, set_cached_titles
+
+            # Check cache first
+            cached = get_cached_titles(project_id)
+            if cached:
+                return self._merge_available_documents(
+                    cached["drawings"], cached["specifications"],
+                )
+
+            # Cache miss — fetch from MongoDB
+            drawings = await asyncio.to_thread(
+                self._fetch_drawing_titles, project_id, set_id,
+            )
+            specifications = await asyncio.to_thread(
+                self._fetch_spec_titles, project_id,
+            )
+
+            # Store in cache
+            set_cached_titles(project_id, drawings, specifications)
+
+            return self._merge_available_documents(drawings, specifications)
+
+        except Exception as exc:
+            logger.error("Document discovery failed: %s", exc)
+            return []
+
+    @staticmethod
+    def _fetch_drawing_titles(project_id: int, set_id: Optional[int] = None) -> list[dict]:
+        """Fetch unique drawing titles from MongoDB."""
+        try:
+            from agentic.tools.drawing_tools import list_unique_drawing_titles  # type: ignore
+            return list_unique_drawing_titles(project_id, set_id)
+        except Exception as exc:
+            logger.error("Failed to fetch drawing titles: %s", exc)
+            return []
+
+    @staticmethod
+    def _fetch_spec_titles(project_id: int) -> list[dict]:
+        """Fetch unique spec titles from MongoDB."""
+        try:
+            from agentic.tools.specification_tools import list_unique_spec_titles  # type: ignore
+            return list_unique_spec_titles(project_id)
+        except Exception as exc:
+            logger.error("Failed to fetch spec titles: %s", exc)
+            return []
+
+    @staticmethod
+    def _merge_available_documents(
+        drawings: list[dict],
+        specifications: list[dict],
+    ) -> list[dict]:
+        """Merge drawing and spec title lists into a unified available_documents list.
+
+        Groups by document type, includes trade info for drawings.
+        """
+        result: list[dict] = []
+
+        for d in drawings:
+            result.append({
+                "type": "drawing",
+                "drawing_title": d.get("drawingTitle", ""),
+                "drawing_name": d.get("drawingName", ""),
+                "trade": d.get("trade", ""),
+                "pdf_name": d.get("pdfName", ""),
+                "fragment_count": d.get("fragment_count", 0),
+            })
+
+        for s in specifications:
+            result.append({
+                "type": "specification",
+                "section_title": s.get("sectionTitle", ""),
+                "pdf_name": s.get("pdfName", ""),
+                "specification_number": s.get("specificationNumber", ""),
+                "fragment_count": s.get("fragment_count", 0),
+            })
+
+        return result
 
     # ------------------------------------------------------------------
     # Web search (shared by web-only and hybrid modes)

@@ -216,13 +216,27 @@ class AgentResult:
     confidence: str  # "high", "medium", "low"
     needs_escalation: bool = False
     escalation_reason: str = ""
+    follow_up_questions: List[str] = field(default_factory=list)
 
 
-def _execute_tool(name: str, args: Dict) -> str:
+def _execute_tool(name: str, args: Dict, scope: Optional[Dict] = None) -> str:
     """Execute a tool by name and return JSON result (sanitized errors)."""
     func = TOOL_FUNCTIONS.get(name)
     if not func:
         return json.dumps({"error": f"Unknown tool: {name}"})
+
+    # Inject document scope filters into tool args (DB-level enforcement)
+    if scope:
+        if name in ("legacy_search_text", "legacy_search_trade", "legacy_list_drawings"):
+            if scope.get("drawing_title"):
+                args["drawing_title"] = scope["drawing_title"]
+            if scope.get("drawing_name"):
+                args["drawing_name"] = scope["drawing_name"]
+        elif name in ("spec_search", "spec_list"):
+            if scope.get("section_title"):
+                args["section_title"] = scope["section_title"]
+            if scope.get("pdf_name"):
+                args["pdf_name"] = scope["pdf_name"]
 
     try:
         result = func(**args)
@@ -246,6 +260,7 @@ def run_agent(
     project_id: int,
     set_id: int = None,
     conversation_history: List[Dict] = None,
+    scope: Optional[Dict] = None,
 ) -> AgentResult:
     """Run the agentic RAG pipeline with production safeguards."""
 
@@ -335,7 +350,7 @@ def run_agent(
                     tool_args["set_id"] = set_id
 
                 logger.info(f"Step {step_num}: {tool_name}({json.dumps(tool_args)[:100]})")
-                tool_result = _execute_tool(tool_name, tool_args)
+                tool_result = _execute_tool(tool_name, tool_args, scope=scope)
 
                 # Track sources
                 try:
@@ -376,6 +391,20 @@ def run_agent(
 
     elapsed_ms = int((time.perf_counter() - start) * 1000)
 
+    # Parse follow-up questions from agent answer
+    follow_up_questions = []
+    separator = "---FOLLOW_UP---"
+    if separator in answer:
+        parts = answer.split(separator, 1)
+        answer = parts[0].strip()
+        for line in parts[1].strip().splitlines():
+            line = line.strip()
+            if line.startswith("- "):
+                q = line[2:].strip()
+                if q:
+                    follow_up_questions.append(q)
+        follow_up_questions = follow_up_questions[:5]  # cap at 5
+
     # Compute cost (GPT-4.1: $2/1M input, $8/1M output)
     cost = (total_input * 2.0 + total_output * 8.0) / 1_000_000
     _record_cost(cost)
@@ -404,6 +433,7 @@ def run_agent(
         confidence=confidence,
         needs_escalation=needs_escalation,
         escalation_reason=escalation_reason,
+        follow_up_questions=follow_up_questions,
     )
 
     # Cache successful results
