@@ -89,7 +89,8 @@ def get_drawing_text(
     fragments = list(coll.find(
         query,
         {"text": 1, "x": 1, "y": 1, "page": 1,
-         "drawingTitle": 1, "drawingName": 1, "trade": 1, "_id": 0},
+         "drawingTitle": 1, "drawingName": 1, "trade": 1,
+         "pdfName": 1, "s3BucketPath": 1, "_id": 0},
     ).sort([("page", 1), ("y", 1), ("x", 1)]).limit(5000))
 
     if not fragments:
@@ -105,6 +106,8 @@ def get_drawing_text(
         "drawingTitle": title,
         "drawingName": name,
         "trade": trade,
+        "pdfName": fragments[0].get("pdfName", ""),
+        "s3BucketPath": fragments[0].get("s3BucketPath", ""),
         "fragment_count": len(fragments),
         "reconstructed_text": text[:30000],
         "text_length": len(text),
@@ -138,6 +141,8 @@ def search_drawing_text(
             "drawingTitle": {"$first": "$drawingTitle"},
             "drawingName": {"$first": "$drawingName"},
             "setTrade": {"$first": {"$ifNull": ["$setTrade", "$trade"]}},
+            "pdfName": {"$first": "$pdfName"},
+            "s3BucketPath": {"$first": "$s3BucketPath"},
             "matching_texts": {"$push": "$text"},
             "match_count": {"$sum": 1},
         }},
@@ -154,6 +159,8 @@ def search_drawing_text(
             "drawingTitle": doc.get("drawingTitle", ""),
             "drawingName": doc.get("drawingName", ""),
             "setTrade": doc.get("setTrade", ""),
+            "pdfName": doc.get("pdfName", ""),
+            "s3BucketPath": doc.get("s3BucketPath", ""),
             "match_count": doc.get("match_count", 0),
             "sample_matches": previews,
         })
@@ -195,6 +202,8 @@ def search_drawings_by_trade(
             "drawingTitle": {"$first": "$drawingTitle"},
             "drawingName": {"$first": "$drawingName"},
             "setTrade": {"$first": {"$ifNull": ["$setTrade", "$trade"]}},
+            "pdfName": {"$first": "$pdfName"},
+            "s3BucketPath": {"$first": "$s3BucketPath"},
             "fragment_count": {"$sum": 1},
         }},
         {"$sort": {"drawingName": 1}},
