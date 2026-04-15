@@ -64,7 +64,6 @@ def ensure_indexes() -> None:
             return
 
         _ensure_drawing_indexes()
-        _ensure_vision_indexes()
         _ensure_spec_indexes()
         _indexes_initialized = True
         logger.info("All collection indexes verified")
@@ -89,48 +88,6 @@ def _ensure_drawing_indexes() -> None:
                 logger.info(f"Created index {idx['name']} on drawing collection")
             except Exception as e:
                 logger.warning(f"Index creation failed for {idx['name']}: {e}")
-
-
-def _ensure_vision_indexes() -> None:
-    """Create indexes on the drawingVision collection."""
-    from config import VISION_COLLECTION
-
-    coll = get_collection(VISION_COLLECTION)
-    existing = coll.index_information()
-
-    if "project_set_idx" not in existing:
-        try:
-            coll.create_index(
-                [("projectId", 1), ("setId", 1)],
-                name="project_set_idx",
-            )
-            logger.info("Created project_set_idx on drawingVision")
-        except Exception:
-            pass
-
-    if "text_search" not in existing:
-        try:
-            from pymongo import TEXT
-            coll.create_index(
-                [
-                    ("pages.page_summary", TEXT),
-                    ("pages.key_notes", TEXT),
-                    ("pages.general_notes", TEXT),
-                    ("pages.blocks.text", TEXT),
-                    ("sourceFile", TEXT),
-                ],
-                name="text_search",
-                weights={
-                    "pages.page_summary": 10,
-                    "pages.key_notes": 8,
-                    "pages.general_notes": 8,
-                    "pages.blocks.text": 3,
-                    "sourceFile": 5,
-                },
-            )
-            logger.info("Created text_search index on drawingVision")
-        except Exception as e:
-            logger.warning(f"Text index creation failed (may already exist): {e}")
 
 
 def _ensure_spec_indexes() -> None:
