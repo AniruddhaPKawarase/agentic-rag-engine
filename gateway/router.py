@@ -378,13 +378,21 @@ async def set_scope(request: Request, session_id: str, body: dict = {}) -> dict:
     """Set document scope for a session."""
     try:
         from shared.session.manager import set_document_scope
+
+        # Sanitize inputs — strip control characters, limit length
+        import re
+        def _sanitize(val: str, max_len: int = 200) -> str:
+            if not val:
+                return ""
+            return re.sub(r'[\x00-\x1f\x7f]', '', val)[:max_len].strip()
+
         result = set_document_scope(
             session_id=session_id,
-            drawing_title=body.get("drawing_title", ""),
-            drawing_name=body.get("drawing_name", ""),
-            document_type=body.get("document_type", "drawing"),
-            section_title=body.get("section_title", ""),
-            pdf_name=body.get("pdf_name", ""),
+            drawing_title=_sanitize(body.get("drawing_title", "")),
+            drawing_name=_sanitize(body.get("drawing_name", "")),
+            document_type=_sanitize(body.get("document_type", "drawing"), 20),
+            section_title=_sanitize(body.get("section_title", "")),
+            pdf_name=_sanitize(body.get("pdf_name", "")),
         )
         return {"success": True, "session_id": session_id, "scope": result}
     except ImportError:
@@ -517,6 +525,14 @@ async def debug_pipeline(request: Request) -> dict:
         "traditional": {
             "faiss_loaded": orchestrator.traditional.is_loaded,
         },
+        "title_cache": {},
     }
+
+    # Add title cache stats
+    try:
+        from gateway.title_cache import get_cache_stats
+        debug_info["title_cache"] = get_cache_stats()
+    except ImportError:
+        debug_info["title_cache"] = {"status": "not available"}
 
     return debug_info

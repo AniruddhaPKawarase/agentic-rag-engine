@@ -79,6 +79,7 @@ def _ensure_drawing_indexes() -> None:
         {"keys": [("projectId", 1), ("setTrade", 1)], "name": "project_trade_idx"},
         {"keys": [("projectId", 1), ("trade", 1)], "name": "project_trade2_idx"},
         {"keys": [("projectId", 1), ("text", 1)], "name": "project_text_idx"},
+        {"keys": [("projectId", 1), ("drawingTitle", 1), ("drawingName", 1)], "name": "project_title_name_idx"},
     ]
 
     for idx in indexes:
