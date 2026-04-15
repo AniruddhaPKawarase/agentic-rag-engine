@@ -347,6 +347,10 @@ class Orchestrator:
         self.fallback_timeout = fallback_timeout
         self.agentic = AgenticEngine()
         self.traditional = TraditionalEngine()
+        # Per-request context (set at start of query(), used by _build_response)
+        self._last_query: str = ""
+        self._last_project_id: Optional[int] = None
+        self._last_session_id: Optional[str] = None
 
     async def query(
         self,
@@ -372,6 +376,11 @@ class Orchestrator:
         """
         start = time.monotonic()
         search_mode = search_mode or "rag"
+
+        # Store per-request context for _build_response
+        self._last_query = query
+        self._last_project_id = project_id
+        self._last_session_id = session_id
 
         # --- Web-only mode ---
         if search_mode == "web":
@@ -769,7 +778,10 @@ class Orchestrator:
         # --- None result (engine error or timeout) ---
         if result is None:
             return _base_response(
+                query=self._last_query or "",
                 processing_time_ms=elapsed_ms,
+                project_id=self._last_project_id,
+                session_id=self._last_session_id,
                 success=error is None,
                 engine_used=engine,
                 fallback_used=fallback_used,
@@ -804,10 +816,12 @@ class Orchestrator:
         answer = getattr(result, "answer", str(result))
         sources = getattr(result, "sources", []) or []
         confidence = getattr(result, "confidence", "medium")
-        cost = getattr(result, "cost_usd", 0.0)
+        cost = getattr(result, "total_cost_usd", 0.0)
         steps = getattr(result, "total_steps", 0)
         model = getattr(result, "model", "")
         follow_ups = getattr(result, "follow_up_questions", []) or []
+        input_tokens = getattr(result, "total_input_tokens", 0)
+        output_tokens = getattr(result, "total_output_tokens", 0)
 
         # Use structured source_docs (with s3BucketPath/pdfName) when available
         # for proper download URL construction; fall back to plain string sources
@@ -818,6 +832,7 @@ class Orchestrator:
         source_documents, s3_paths = _extract_source_documents(raw_sources)
 
         return _base_response(
+            query=self._last_query or "",
             answer=answer,
             rag_answer=answer,
             retrieval_count=len(sources),
@@ -828,9 +843,9 @@ class Orchestrator:
             follow_up_questions=follow_ups,
             model_used=model,
             token_usage={
-                "total_tokens": 0,
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
+                "total_tokens": input_tokens + output_tokens,
+                "prompt_tokens": input_tokens,
+                "completion_tokens": output_tokens,
             },
             s3_paths=s3_paths,
             s3_path_count=len(s3_paths),
@@ -840,6 +855,8 @@ class Orchestrator:
                 "agentic_cost_usd": cost,
             },
             processing_time_ms=elapsed_ms,
+            project_id=self._last_project_id,
+            session_id=self._last_session_id,
             search_mode="agentic",
             engine_used=engine,
             fallback_used=fallback_used,
