@@ -225,10 +225,13 @@ async def web_search(request: Request, body: QueryRequest) -> dict:
 async def create_session(request: Request, body: dict = {}) -> dict:
     """Create a new session."""
     try:
-        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
-        mm = MemoryManager()
+        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
+        mm = get_memory_manager()
         session_id = mm.create_session(
+            user_query=body.get("initial_query", "Session created via API"),
             project_id=body.get("project_id"),
+            filter_source_type=body.get("filter_source_type"),
+            session_id=body.get("session_id"),
         )
         return {"success": True, "session_id": session_id}
     except ImportError:
@@ -244,12 +247,21 @@ async def create_session(request: Request, body: dict = {}) -> dict:
 async def list_sessions(request: Request) -> dict:
     """List all sessions."""
     try:
-        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
-        mm = MemoryManager()
-        sessions = mm.list_sessions()
-        return {"success": True, "sessions": sessions}
+        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
+        mm = get_memory_manager()
+        sessions = []
+        for sid, session in mm.sessions.items():
+            sessions.append({
+                "session_id": sid,
+                "created_at": session.created_at,
+                "last_accessed": session.last_accessed,
+                "message_count": len(session.messages),
+                "total_tokens": session.total_tokens,
+                "project_id": session.context.project_id,
+            })
+        return {"success": True, "count": len(sessions), "sessions": sessions}
     except ImportError:
-        return {"success": True, "sessions": [], "stub": True}
+        return {"success": True, "count": 0, "sessions": [], "stub": True}
     except Exception as exc:
         logger.error("List sessions failed: %s", exc)
         return {"success": False, "error": "An internal error occurred. Please try again."}
@@ -260,8 +272,12 @@ async def session_stats(request: Request, session_id: str) -> dict:
     """Get session stats including engine usage."""
     try:
         from shared.session.manager import get_session_stats_extended
-        stats = get_session_stats_extended(session_id)
-        return {"success": True, **stats}
+        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
+        mm = get_memory_manager()
+        # Combine both layers of session stats
+        basic_stats = mm.get_session_stats(session_id)
+        unified_stats = get_session_stats_extended(session_id)
+        return {"success": True, **basic_stats, **unified_stats}
     except ImportError:
         return {"success": True, "session_id": session_id, "stub": True}
     except Exception as exc:
@@ -273,10 +289,18 @@ async def session_stats(request: Request, session_id: str) -> dict:
 async def session_conversation(request: Request, session_id: str) -> dict:
     """Get conversation history for a session."""
     try:
-        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
-        mm = MemoryManager()
-        history = mm.get_conversation(session_id)
-        return {"success": True, "session_id": session_id, "conversation": history}
+        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
+        mm = get_memory_manager()
+        session = mm.get_session(session_id)
+        if not session:
+            return {"success": False, "error": "Session not found"}
+        history = session.get_full_conversation_history(include_summaries=True)
+        return {
+            "success": True,
+            "session_id": session_id,
+            "message_count": len(session.messages),
+            "conversation": history,
+        }
     except ImportError:
         return {"success": True, "session_id": session_id, "conversation": [], "stub": True}
     except Exception as exc:
@@ -288,9 +312,16 @@ async def session_conversation(request: Request, session_id: str) -> dict:
 async def update_session(request: Request, session_id: str, body: dict = {}) -> dict:
     """Update session context."""
     try:
-        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
-        mm = MemoryManager()
-        mm.update_session(session_id, body)
+        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
+        mm = get_memory_manager()
+        mm.update_context(
+            session_id=session_id,
+            project_id=body.get("project_id"),
+            filter_source_type=body.get("filter_source_type"),
+            custom_instructions=body.get("custom_instructions"),
+            pinned_documents=body.get("pinned_documents"),
+            pinned_titles=body.get("pinned_titles"),
+        )
         return {"success": True, "session_id": session_id}
     except ImportError:
         return {"success": True, "session_id": session_id, "stub": True}
@@ -303,10 +334,10 @@ async def update_session(request: Request, session_id: str, body: dict = {}) -> 
 async def delete_session(request: Request, session_id: str) -> dict:
     """Delete a session."""
     try:
-        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
-        mm = MemoryManager()
-        mm.delete_session(session_id)
-        return {"success": True, "session_id": session_id, "deleted": True}
+        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
+        mm = get_memory_manager()
+        deleted = mm.clear_session(session_id)
+        return {"success": True, "session_id": session_id, "deleted": deleted}
     except ImportError:
         return {"success": True, "session_id": session_id, "deleted": True, "stub": True}
     except Exception as exc:
@@ -318,10 +349,15 @@ async def delete_session(request: Request, session_id: str) -> dict:
 async def pin_document(request: Request, session_id: str, body: dict = {}) -> dict:
     """Pin documents to a session for persistent context."""
     try:
-        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
-        mm = MemoryManager()
-        mm.pin_document(session_id, body.get("document_ids", []))
-        return {"success": True, "session_id": session_id, "pinned": True}
+        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
+        mm = get_memory_manager()
+        doc_ids = body.get("document_ids", [])
+        mm.update_context(
+            session_id=session_id,
+            pinned_documents=doc_ids,
+            pinned_titles=body.get("document_titles", doc_ids),
+        )
+        return {"success": True, "session_id": session_id, "pinned": True, "document_count": len(doc_ids)}
     except ImportError:
         return {"success": True, "session_id": session_id, "pinned": True, "stub": True}
     except Exception as exc:
@@ -333,9 +369,13 @@ async def pin_document(request: Request, session_id: str, body: dict = {}) -> di
 async def unpin_document(request: Request, session_id: str, body: dict = {}) -> dict:
     """Unpin documents from a session."""
     try:
-        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
-        mm = MemoryManager()
-        mm.unpin_document(session_id, body.get("document_ids", []))
+        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
+        mm = get_memory_manager()
+        mm.update_context(
+            session_id=session_id,
+            pinned_documents=[],
+            pinned_titles=[],
+        )
         return {"success": True, "session_id": session_id, "unpinned": True}
     except ImportError:
         return {"success": True, "session_id": session_id, "unpinned": True, "stub": True}
