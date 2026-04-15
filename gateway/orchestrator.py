@@ -439,6 +439,57 @@ class Orchestrator:
             except ImportError:
                 pass
 
+        # --- Session management for agentic queries ---
+        # The traditional engine handles sessions internally, but the agentic
+        # engine does not. We create/update sessions here for agentic results.
+        active_session_id = session_id
+        session_stats = None
+        try:
+            from traditional.memory_manager import get_memory_manager, estimate_tokens  # type: ignore
+            mm = get_memory_manager()
+            if not active_session_id:
+                active_session_id = mm.create_session(
+                    user_query=query,
+                    project_id=project_id,
+                )
+            # Add user message
+            mm.add_to_session(
+                session_id=active_session_id,
+                role="user",
+                content=query,
+                tokens=estimate_tokens(query),
+                metadata={"search_mode": "agentic", "project_id": project_id},
+            )
+            # Add assistant message if we have an answer
+            answer_text = getattr(agentic_result, "answer", "") if agentic_result else ""
+            if answer_text:
+                mm.add_to_session(
+                    session_id=active_session_id,
+                    role="assistant",
+                    content=answer_text,
+                    tokens=estimate_tokens(answer_text),
+                    metadata={
+                        "engine": "agentic",
+                        "confidence": getattr(agentic_result, "confidence", ""),
+                        "cost_usd": getattr(agentic_result, "total_cost_usd", 0),
+                    },
+                )
+            session_stats = mm.get_session_stats(active_session_id)
+        except (ImportError, Exception) as exc:
+            logger.debug("Session management for agentic: %s", exc)
+
+        # Update per-request context with resolved session_id
+        self._last_session_id = active_session_id
+
+        # --- Record engine usage ---
+        if active_session_id:
+            try:
+                from shared.session.manager import record_engine_use
+                cost = getattr(agentic_result, "total_cost_usd", 0.0) if agentic_result else 0.0
+                record_engine_use(active_session_id, "agentic", cost)
+            except ImportError:
+                pass
+
         # --- Success: agentic answered well ---
         if not _should_fallback(agentic_result):
             resp = self._build_response(
@@ -448,6 +499,8 @@ class Orchestrator:
                 fallback_used=False,
                 error=None,
             )
+            resp["session_id"] = active_session_id
+            resp["session_stats"] = session_stats
             if scope:
                 resp["scoped_to"] = scope.get("drawing_title") or scope.get("section_title")
             return resp
@@ -479,6 +532,8 @@ class Orchestrator:
             # Discover other documents for suggestions
             available = await self._discover_documents(project_id, set_id)
             resp["available_documents"] = available
+            resp["session_id"] = active_session_id
+            resp["session_stats"] = session_stats
             return resp
 
         # Not scoped: run document discovery for the full project
@@ -513,6 +568,8 @@ class Orchestrator:
         except Exception as exc:
             logger.warning("Query enhancement failed: %s", exc)
 
+        resp["session_id"] = active_session_id
+        resp["session_stats"] = session_stats
         return resp
 
     # ------------------------------------------------------------------
