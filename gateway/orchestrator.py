@@ -458,6 +458,20 @@ class Orchestrator:
         resp["agentic_confidence"] = agentic_confidence
         available = await self._discover_documents(project_id, set_id)
         resp["available_documents"] = available
+
+        # Generate improved queries and tips (query enhancement)
+        try:
+            from gateway.query_enhancer import generate_query_enhancement
+            enhancement = generate_query_enhancement(
+                original_query=query,
+                available_documents=available,
+                project_id=project_id,
+            )
+            resp["improved_queries"] = enhancement.get("improved_queries", [])
+            resp["query_tips"] = enhancement.get("query_tips", [])
+        except Exception as exc:
+            logger.warning("Query enhancement failed: %s", exc)
+
         return resp
 
     # ------------------------------------------------------------------

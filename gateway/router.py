@@ -345,6 +345,132 @@ async def unpin_document(request: Request, session_id: str, body: dict = {}) -> 
 
 
 # ---------------------------------------------------------------------------
+# Document Discovery (Angular UI integration)
+# ---------------------------------------------------------------------------
+
+@router.get("/projects/{project_id}/documents")
+async def discover_documents(request: Request, project_id: int, set_id: int = None) -> dict:
+    """List available drawing titles and spec sections for a project.
+
+    Used by the Angular frontend to show document groups when the agent
+    cannot answer — the user can select a document to scope queries.
+    """
+    try:
+        orchestrator = _get_orchestrator(request)
+        available = await orchestrator._discover_documents(project_id, set_id)
+        return {
+            "success": True,
+            "project_id": project_id,
+            "document_count": len(available),
+            "documents": available,
+        }
+    except Exception as exc:
+        logger.error("Document discovery failed: %s", exc)
+        return {"success": False, "error": "An internal error occurred. Please try again."}
+
+
+# ---------------------------------------------------------------------------
+# Session Scope Endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/sessions/{session_id}/scope")
+async def set_scope(request: Request, session_id: str, body: dict = {}) -> dict:
+    """Set document scope for a session."""
+    try:
+        from shared.session.manager import set_document_scope
+        result = set_document_scope(
+            session_id=session_id,
+            drawing_title=body.get("drawing_title", ""),
+            drawing_name=body.get("drawing_name", ""),
+            document_type=body.get("document_type", "drawing"),
+            section_title=body.get("section_title", ""),
+            pdf_name=body.get("pdf_name", ""),
+        )
+        return {"success": True, "session_id": session_id, "scope": result}
+    except ImportError:
+        return {"success": True, "session_id": session_id, "scope": {}, "stub": True}
+    except Exception as exc:
+        logger.error("Set scope failed: %s", exc)
+        return {"success": False, "error": "An internal error occurred. Please try again."}
+
+
+@router.delete("/sessions/{session_id}/scope")
+async def clear_scope(request: Request, session_id: str) -> dict:
+    """Clear document scope, return to full project search."""
+    try:
+        from shared.session.manager import clear_document_scope
+        result = clear_document_scope(session_id)
+        return {"success": True, "session_id": session_id, "scope": result}
+    except ImportError:
+        return {"success": True, "session_id": session_id, "scope": {}, "stub": True}
+    except Exception as exc:
+        logger.error("Clear scope failed: %s", exc)
+        return {"success": False, "error": "An internal error occurred. Please try again."}
+
+
+@router.get("/sessions/{session_id}/scope")
+async def get_scope(request: Request, session_id: str) -> dict:
+    """Get current document scope state for a session."""
+    try:
+        from shared.session.manager import get_document_scope, get_meta
+        scope = get_document_scope(session_id)
+        meta = get_meta(session_id)
+        return {
+            "success": True,
+            "session_id": session_id,
+            "scope": scope,
+            "previously_scoped": meta.previously_scoped,
+        }
+    except ImportError:
+        return {"success": True, "session_id": session_id, "scope": {}, "stub": True}
+    except Exception as exc:
+        logger.error("Get scope failed: %s", exc)
+        return {"success": False, "error": "An internal error occurred. Please try again."}
+
+
+# ---------------------------------------------------------------------------
+# Admin / Maintenance Endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/admin/sessions")
+async def admin_list_sessions(request: Request) -> dict:
+    """Admin: list all active sessions with scope state."""
+    try:
+        from shared.session.manager import _session_meta
+        sessions = []
+        for sid, meta in _session_meta.items():
+            sessions.append({
+                "session_id": sid,
+                "last_engine": meta.last_engine,
+                "total_cost_usd": meta.total_cost_usd,
+                "scope": meta.scope.to_dict(),
+                "engine_usage": meta.engine_usage.to_dict(),
+            })
+        return {"success": True, "count": len(sessions), "sessions": sessions}
+    except ImportError:
+        return {"success": True, "count": 0, "sessions": [], "stub": True}
+
+
+@router.post("/admin/cache/refresh")
+async def admin_cache_refresh(request: Request, body: dict = {}) -> dict:
+    """Admin: refresh or invalidate title cache."""
+    try:
+        from gateway.title_cache import invalidate_project, invalidate_all, get_cache_stats
+        project_id = body.get("project_id")
+        if project_id:
+            existed = invalidate_project(int(project_id))
+            return {"success": True, "action": "invalidate_project", "project_id": project_id, "existed": existed}
+        else:
+            count = invalidate_all()
+            return {"success": True, "action": "invalidate_all", "cleared": count}
+    except ImportError:
+        return {"success": True, "action": "noop", "stub": True}
+    except Exception as exc:
+        logger.error("Cache refresh failed: %s", exc)
+        return {"success": False, "error": "An internal error occurred. Please try again."}
+
+
+# ---------------------------------------------------------------------------
 # Debug Endpoints
 # ---------------------------------------------------------------------------
 
