@@ -9,7 +9,16 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ConversationMessage(BaseModel):
+    """A single message in the conversation history."""
+
+    model_config = ConfigDict(extra="allow")
+
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(max_length=10000)
 
 
 class QueryRequest(BaseModel):
@@ -23,7 +32,7 @@ class QueryRequest(BaseModel):
     filter_source_type: Optional[str] = None
     filter_drawing_name: Optional[str] = None
     set_id: Optional[int] = None
-    conversation_history: Optional[list] = None
+    conversation_history: Optional[list[ConversationMessage]] = None
     engine: Optional[str] = None
 
 
@@ -44,3 +53,8 @@ class UnifiedResponse(BaseModel):
     elapsed_ms: int = 0
     total_steps: int = 0
     model: str = ""
+    needs_document_selection: bool = False
+    available_documents: list[dict] = Field(default_factory=list)
+    improved_queries: list[str] = Field(default_factory=list)
+    query_tips: list[str] = Field(default_factory=list)
+    scoped_to: Optional[str] = None

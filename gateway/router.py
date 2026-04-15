@@ -15,14 +15,15 @@ import time
 import uuid
 from typing import Any, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from gateway.auth import auth_required
 from gateway.models import QueryRequest, UnifiedResponse
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(auth_required)])
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +57,7 @@ def _get_config_summary() -> dict:
         }
     except Exception as exc:
         logger.warning("Failed to load config summary: %s", exc)
-        return {"error": str(exc)}
+        return {"error": "Configuration unavailable"}
 
 
 # ---------------------------------------------------------------------------
@@ -161,9 +162,9 @@ async def query_stream(request: Request, body: QueryRequest) -> StreamingRespons
                 )
                 yield f"data: {json.dumps(result)}\n\n"
             except Exception as exc:
-                yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+                yield f"data: {json.dumps({'error': 'An internal error occurred. Please try again.'})}\n\n"
         except Exception as exc:
-            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+            yield f"data: {json.dumps({'error': 'An internal error occurred. Please try again.'})}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(
@@ -213,7 +214,7 @@ async def web_search(request: Request, body: QueryRequest) -> dict:
         return {"success": False, "error": "Traditional engine not available for web search"}
     except Exception as exc:
         logger.error("Web search failed: %s", exc)
-        return {"success": False, "error": str(exc)}
+        return {"success": False, "error": "An internal error occurred. Please try again."}
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +237,7 @@ async def create_session(request: Request, body: dict = {}) -> dict:
         return {"success": True, "session_id": session_id, "stub": True}
     except Exception as exc:
         logger.error("Session creation failed: %s", exc)
-        return {"success": False, "error": str(exc)}
+        return {"success": False, "error": "An internal error occurred. Please try again."}
 
 
 @router.get("/sessions")
@@ -251,7 +252,7 @@ async def list_sessions(request: Request) -> dict:
         return {"success": True, "sessions": [], "stub": True}
     except Exception as exc:
         logger.error("List sessions failed: %s", exc)
-        return {"success": False, "error": str(exc)}
+        return {"success": False, "error": "An internal error occurred. Please try again."}
 
 
 @router.get("/sessions/{session_id}/stats")
@@ -265,7 +266,7 @@ async def session_stats(request: Request, session_id: str) -> dict:
         return {"success": True, "session_id": session_id, "stub": True}
     except Exception as exc:
         logger.error("Session stats failed: %s", exc)
-        return {"success": False, "error": str(exc)}
+        return {"success": False, "error": "An internal error occurred. Please try again."}
 
 
 @router.get("/sessions/{session_id}/conversation")
@@ -280,7 +281,7 @@ async def session_conversation(request: Request, session_id: str) -> dict:
         return {"success": True, "session_id": session_id, "conversation": [], "stub": True}
     except Exception as exc:
         logger.error("Get conversation failed: %s", exc)
-        return {"success": False, "error": str(exc)}
+        return {"success": False, "error": "An internal error occurred. Please try again."}
 
 
 @router.post("/sessions/{session_id}/update")
@@ -295,7 +296,7 @@ async def update_session(request: Request, session_id: str, body: dict = {}) -> 
         return {"success": True, "session_id": session_id, "stub": True}
     except Exception as exc:
         logger.error("Update session failed: %s", exc)
-        return {"success": False, "error": str(exc)}
+        return {"success": False, "error": "An internal error occurred. Please try again."}
 
 
 @router.delete("/sessions/{session_id}")
@@ -310,7 +311,7 @@ async def delete_session(request: Request, session_id: str) -> dict:
         return {"success": True, "session_id": session_id, "deleted": True, "stub": True}
     except Exception as exc:
         logger.error("Delete session failed: %s", exc)
-        return {"success": False, "error": str(exc)}
+        return {"success": False, "error": "An internal error occurred. Please try again."}
 
 
 @router.post("/sessions/{session_id}/pin-document")
@@ -325,7 +326,7 @@ async def pin_document(request: Request, session_id: str, body: dict = {}) -> di
         return {"success": True, "session_id": session_id, "pinned": True, "stub": True}
     except Exception as exc:
         logger.error("Pin document failed: %s", exc)
-        return {"success": False, "error": str(exc)}
+        return {"success": False, "error": "An internal error occurred. Please try again."}
 
 
 @router.delete("/sessions/{session_id}/pin-document")
@@ -340,7 +341,7 @@ async def unpin_document(request: Request, session_id: str, body: dict = {}) -> 
         return {"success": True, "session_id": session_id, "unpinned": True, "stub": True}
     except Exception as exc:
         logger.error("Unpin document failed: %s", exc)
-        return {"success": False, "error": str(exc)}
+        return {"success": False, "error": "An internal error occurred. Please try again."}
 
 
 # ---------------------------------------------------------------------------
@@ -369,10 +370,10 @@ async def test_retrieve(
             "results": results[:top_k],
         }
     except ImportError as exc:
-        return {"success": False, "error": f"Traditional engine not available: {exc}"}
+        return {"success": False, "error": "Traditional engine not available"}
     except Exception as exc:
         logger.error("Test retrieve failed: %s", exc)
-        return {"success": False, "error": str(exc)}
+        return {"success": False, "error": "An internal error occurred. Please try again."}
 
 
 @router.get("/debug-pipeline")
@@ -391,19 +392,5 @@ async def debug_pipeline(request: Request) -> dict:
             "faiss_loaded": orchestrator.traditional.is_loaded,
         },
     }
-
-    # Try to get agentic module info
-    try:
-        import agentic  # type: ignore[import-untyped]
-        debug_info["agentic"]["module_path"] = str(agentic.__file__)
-    except ImportError:
-        debug_info["agentic"]["module_path"] = "not importable"
-
-    # Try to get traditional module info
-    try:
-        import traditional  # type: ignore[import-untyped]
-        debug_info["traditional"]["module_path"] = str(traditional.__file__)
-    except ImportError:
-        debug_info["traditional"]["module_path"] = "not importable"
 
     return debug_info

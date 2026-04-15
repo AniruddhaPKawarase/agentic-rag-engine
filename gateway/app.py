@@ -10,14 +10,31 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from gateway.orchestrator import Orchestrator
 from gateway.router import router
 from shared.config import get_config
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Rate Limiting (optional — degrades gracefully if slowapi not installed)
+# ---------------------------------------------------------------------------
+
+_limiter = None
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler  # type: ignore[import-untyped]
+    from slowapi.errors import RateLimitExceeded  # type: ignore[import-untyped]
+    from slowapi.util import get_remote_address  # type: ignore[import-untyped]
+
+    _limiter = Limiter(key_func=get_remote_address, default_limits=["20/minute"])
+    logger.info("slowapi rate limiting loaded (20/min default)")
+except ImportError:
+    logger.info("slowapi not installed — rate limiting disabled")
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +107,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Rate Limiting ---
+if _limiter is not None:
+    app.state.limiter = _limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    logger.info("Rate limiting enabled")
 
 # --- Prometheus (optional) ---
 try:

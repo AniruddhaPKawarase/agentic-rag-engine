@@ -18,6 +18,115 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# Confidence string → numeric score mapping
+CONFIDENCE_SCORE_MAP = {"high": 0.9, "medium": 0.6, "low": 0.2}
+
+
+def _base_response(**overrides: Any) -> dict:
+    """Return a complete response dict with ALL fields at safe defaults.
+
+    Every response in the system starts from this template so that the
+    frontend ALWAYS receives a consistent shape — regardless of which
+    engine answered.  New fields for future phases are included here
+    with backward-compatible defaults.
+
+    Callers pass only the fields they want to override.
+    """
+    base = {
+        # --- Core answer ---
+        "query": "",
+        "answer": "",
+        "rag_answer": None,
+        "web_answer": None,
+        # --- Retrieval metrics ---
+        "retrieval_count": 0,
+        "average_score": 0.0,
+        "confidence": "low",
+        "confidence_score": 0.0,
+        "is_clarification": False,
+        # --- Follow-up & query enhancement ---
+        "follow_up_questions": [],
+        "improved_queries": [],
+        "query_tips": [],
+        # --- Model info ---
+        "model_used": "",
+        "token_usage": None,
+        "token_tracking": None,
+        # --- Source documents (frontend display) ---
+        "s3_paths": [],
+        "s3_path_count": 0,
+        "source_documents": [],
+        "retrieved_chunks": [],
+        # --- Debug ---
+        "debug_info": None,
+        # --- Timing & context ---
+        "processing_time_ms": 0,
+        "project_id": None,
+        "session_id": None,
+        "session_stats": None,
+        # --- Search mode ---
+        "search_mode": "rag",
+        # --- Web sources ---
+        "web_sources": [],
+        "web_source_count": 0,
+        # --- Document pinning / scoping ---
+        "pin_status": None,
+        "needs_document_selection": False,
+        "available_documents": [],
+        "scoped_to": None,
+        # --- Engine metadata ---
+        "success": True,
+        "engine_used": "agentic",
+        "fallback_used": False,
+        "agentic_confidence": None,
+        "error": None,
+    }
+    base.update(overrides)
+    return base
+
+
+def _extract_source_documents(
+    sources: list,
+) -> tuple[list[dict], list[str]]:
+    """Convert agentic sources (str or dict) to frontend-compatible format.
+
+    Returns (source_documents, s3_paths) where each source_document has:
+    s3_path, file_name, display_title, download_url, pdf_name, drawing_name,
+    drawing_title, page — all fields the Angular frontend needs.
+    """
+    source_documents: list[dict] = []
+    s3_paths: list[str] = []
+
+    for src in sources or []:
+        if isinstance(src, dict):
+            s3_path = src.get("s3_path", src.get("sourceFile", ""))
+            source_documents.append({
+                "s3_path": s3_path,
+                "file_name": src.get("name", src.get("sourceFile", "")),
+                "display_title": src.get("sheet_number", src.get("name", "")),
+                "download_url": src.get("download_url"),
+                "pdf_name": src.get("pdfName", src.get("pdf_name", "")),
+                "drawing_name": src.get("drawingName", src.get("drawing_name", "")),
+                "drawing_title": src.get("drawingTitle", src.get("drawing_title", "")),
+                "page": src.get("page"),
+            })
+            if s3_path:
+                s3_paths.append(s3_path)
+        elif isinstance(src, str):
+            source_documents.append({
+                "s3_path": src,
+                "file_name": src,
+                "display_title": src,
+                "download_url": None,
+                "pdf_name": "",
+                "drawing_name": "",
+                "drawing_title": "",
+                "page": None,
+            })
+            s3_paths.append(src)
+
+    return source_documents, s3_paths
+
 
 # ---------------------------------------------------------------------------
 # Pure fallback decision function
@@ -306,7 +415,7 @@ class Orchestrator:
                 engine="agentic",
                 elapsed_ms=elapsed_ms,
                 fallback_used=False,
-                error=f"Fallback failed: {exc}",
+                error="Both engines encountered issues. Please try again.",
             )
 
     # ------------------------------------------------------------------
@@ -319,45 +428,25 @@ class Orchestrator:
             from traditional.services.web_search import web_search
             result = await asyncio.to_thread(web_search, query)
             elapsed_ms = int((time.monotonic() - start) * 1000)
-            return {
-                "query": query,
-                "answer": result.get("answer", ""),
-                "rag_answer": None,
-                "web_answer": result.get("answer", ""),
-                "retrieval_count": 0,
-                "average_score": 0.0,
-                "confidence_score": 0.8,
-                "is_clarification": False,
-                "follow_up_questions": [],
-                "model_used": "gpt-4.1",
-                "token_usage": None,
-                "token_tracking": None,
-                "s3_paths": [],
-                "s3_path_count": 0,
-                "source_documents": [],
-                "retrieved_chunks": [],
-                "debug_info": None,
-                "processing_time_ms": elapsed_ms,
-                "project_id": None,
-                "session_id": None,
-                "session_stats": None,
-                "search_mode": "web",
-                "web_sources": result.get("sources", []),
-                "web_source_count": len(result.get("sources", [])),
-                "pin_status": None,
-                "success": True,
-                "engine_used": "agentic",
-                "fallback_used": False,
-                "agentic_confidence": None,
-                "error": None,
-            }
+            web_sources = result.get("sources", [])
+            return _base_response(
+                query=query,
+                answer=result.get("answer", ""),
+                web_answer=result.get("answer", ""),
+                confidence_score=0.8,
+                model_used="gpt-4.1",
+                processing_time_ms=elapsed_ms,
+                search_mode="web",
+                web_sources=web_sources,
+                web_source_count=len(web_sources),
+            )
         except Exception as exc:
             elapsed_ms = int((time.monotonic() - start) * 1000)
             logger.error("Web search failed: %s", exc)
-            return self._build_response(
-                result=None, engine="agentic",
-                elapsed_ms=elapsed_ms, fallback_used=False,
-                error=f"Web search failed: {exc}",
+            return _base_response(
+                processing_time_ms=elapsed_ms,
+                success=False,
+                error="Web search failed. Please try again.",
             )
 
     async def _run_hybrid(
@@ -403,7 +492,6 @@ class Orchestrator:
         sources = getattr(agentic_result, "sources", []) if agentic_result else []
         web_sources = web_result.get("sources", []) if web_result else []
         confidence = getattr(agentic_result, "confidence", "low") if agentic_result else "low"
-        conf_map = {"high": 0.9, "medium": 0.6, "low": 0.2}
 
         # Build combined answer
         combined = ""
@@ -416,63 +504,33 @@ class Orchestrator:
         if not combined:
             combined = "No results from either project data or web search."
 
-        # Build source_documents from agentic
-        source_documents = []
-        s3_paths = []
-        for src in (sources or []):
-            if isinstance(src, dict):
-                s3_path = src.get("s3_path", src.get("sourceFile", ""))
-                source_documents.append({
-                    "s3_path": s3_path,
-                    "file_name": src.get("name", src.get("sourceFile", "")),
-                    "display_title": src.get("sheet_number", src.get("name", "")),
-                    "download_url": None,
-                })
-                if s3_path:
-                    s3_paths.append(s3_path)
-            elif isinstance(src, str):
-                source_documents.append({
-                    "s3_path": src, "file_name": src,
-                    "display_title": src, "download_url": None,
-                })
-                s3_paths.append(src)
+        source_documents, s3_paths = _extract_source_documents(sources)
 
-        return {
-            "query": query,
-            "answer": combined,
-            "rag_answer": rag_answer,
-            "web_answer": web_answer,
-            "retrieval_count": len(sources),
-            "average_score": conf_map.get(confidence, 0.5),
-            "confidence_score": conf_map.get(confidence, 0.5),
-            "is_clarification": False,
-            "follow_up_questions": [],
-            "model_used": getattr(agentic_result, "model", "gpt-4.1") if agentic_result else "gpt-4.1",
-            "token_usage": None,
-            "token_tracking": None,
-            "s3_paths": s3_paths,
-            "s3_path_count": len(s3_paths),
-            "source_documents": source_documents,
-            "retrieved_chunks": [],
-            "debug_info": {
+        return _base_response(
+            query=query,
+            answer=combined,
+            rag_answer=rag_answer,
+            web_answer=web_answer,
+            retrieval_count=len(sources),
+            confidence=confidence,
+            average_score=CONFIDENCE_SCORE_MAP.get(confidence, 0.5),
+            confidence_score=CONFIDENCE_SCORE_MAP.get(confidence, 0.5),
+            model_used=getattr(agentic_result, "model", "gpt-4.1") if agentic_result else "gpt-4.1",
+            s3_paths=s3_paths,
+            s3_path_count=len(s3_paths),
+            source_documents=source_documents,
+            debug_info={
                 "agentic_steps": getattr(agentic_result, "total_steps", 0) if agentic_result else 0,
                 "agentic_cost_usd": getattr(agentic_result, "cost_usd", 0.0) if agentic_result else 0.0,
                 "web_sources_count": len(web_sources),
             },
-            "processing_time_ms": elapsed_ms,
-            "project_id": project_id,
-            "session_id": None,
-            "session_stats": None,
-            "search_mode": "hybrid",
-            "web_sources": web_sources,
-            "web_source_count": len(web_sources),
-            "pin_status": None,
-            "success": True,
-            "engine_used": "agentic",
-            "fallback_used": False,
-            "agentic_confidence": confidence,
-            "error": None,
-        }
+            processing_time_ms=elapsed_ms,
+            project_id=project_id,
+            search_mode="hybrid",
+            web_sources=web_sources,
+            web_source_count=len(web_sources),
+            agentic_confidence=confidence,
+        )
 
     @staticmethod
     def _sync_web_search(query: str) -> dict:
@@ -516,141 +574,89 @@ class Orchestrator:
         fallback_used: bool,
         error: Optional[str],
     ) -> dict:
-        """Convert an engine result to a response dict matching old RAG QueryResponse schema.
+        """Convert an engine result to a response dict matching the QueryResponse schema.
 
-        Traditional engine returns a dict (or Pydantic model) — pass through ALL fields,
-        only inject engine_used/fallback_used/agentic_confidence.
+        Handles three result types:
+        1. None → empty response with error
+        2. dict / Pydantic model (traditional engine) → pass through ALL fields, inject engine metadata
+        3. dataclass (agentic engine) → map to the full response schema
 
-        Agentic engine returns a dataclass — map to the old QueryResponse schema so the
-        frontend gets the same shape regardless of which engine answered.
+        Every path returns a dict starting from _base_response() so ALL fields
+        (including source_documents, s3_paths, pdf_name, drawing_name, etc.)
+        are always present for the Angular frontend.
         """
+        # --- None result (engine error or timeout) ---
         if result is None:
-            return {
-                "query": "",
-                "answer": "",
-                "rag_answer": None,
-                "web_answer": None,
-                "retrieval_count": 0,
-                "average_score": 0.0,
-                "confidence_score": 0.0,
-                "is_clarification": False,
-                "follow_up_questions": [],
-                "model_used": "",
-                "token_usage": None,
-                "token_tracking": None,
-                "s3_paths": [],
-                "s3_path_count": 0,
-                "source_documents": [],
-                "retrieved_chunks": [],
-                "debug_info": None,
-                "processing_time_ms": elapsed_ms,
-                "project_id": None,
-                "session_id": None,
-                "session_stats": None,
-                "search_mode": "rag",
-                "web_sources": [],
-                "web_source_count": 0,
-                "pin_status": None,
-                "success": error is None,
-                "engine_used": engine,
-                "fallback_used": fallback_used,
-                "agentic_confidence": None,
-                "error": error,
-            }
+            return _base_response(
+                processing_time_ms=elapsed_ms,
+                success=error is None,
+                engine_used=engine,
+                fallback_used=fallback_used,
+                error=error,
+            )
 
-        # Handle dict results (traditional engine) — pass through ALL fields
+        # --- Dict results (traditional engine) — pass through ALL original fields ---
         if isinstance(result, dict):
-            resp = dict(result)  # shallow copy, preserve all original fields
+            resp = _base_response()  # start from full template
+            resp.update(result)      # overlay all traditional fields (preserves everything)
             resp["engine_used"] = engine
             resp["fallback_used"] = fallback_used
             resp["agentic_confidence"] = resp.get("agentic_confidence")
-            if "processing_time_ms" not in resp:
+            if "processing_time_ms" not in result:
                 resp["processing_time_ms"] = elapsed_ms
             if error:
                 resp["error"] = error
             return resp
 
-        # Handle Pydantic model results (traditional engine returning model)
+        # --- Pydantic model results (traditional engine returning model) ---
         if hasattr(result, "model_dump"):
-            resp = result.model_dump()
+            resp = _base_response()
+            resp.update(result.model_dump())
             resp["engine_used"] = engine
             resp["fallback_used"] = fallback_used
             resp["agentic_confidence"] = None
-            if "processing_time_ms" not in resp:
+            if "processing_time_ms" not in result.model_dump():
                 resp["processing_time_ms"] = elapsed_ms
             return resp
 
-        # Handle dataclass / object results (agentic engine) — map to old schema
+        # --- Dataclass / object results (agentic engine) → map to full schema ---
         answer = getattr(result, "answer", str(result))
         sources = getattr(result, "sources", []) or []
         confidence = getattr(result, "confidence", "medium")
         cost = getattr(result, "cost_usd", 0.0)
         steps = getattr(result, "total_steps", 0)
         model = getattr(result, "model", "")
+        follow_ups = getattr(result, "follow_up_questions", []) or []
 
-        # Map confidence string to numeric score
-        conf_map = {"high": 0.9, "medium": 0.6, "low": 0.2}
-        confidence_score = conf_map.get(confidence, 0.5)
+        confidence_score = CONFIDENCE_SCORE_MAP.get(confidence, 0.5)
+        source_documents, s3_paths = _extract_source_documents(sources)
 
-        # Build source_documents from agentic sources
-        source_documents = []
-        s3_paths = []
-        for src in sources:
-            if isinstance(src, dict):
-                s3_path = src.get("s3_path", src.get("sourceFile", ""))
-                source_documents.append({
-                    "s3_path": s3_path,
-                    "file_name": src.get("name", src.get("sourceFile", "")),
-                    "display_title": src.get("sheet_number", src.get("name", "")),
-                    "download_url": None,
-                })
-                if s3_path:
-                    s3_paths.append(s3_path)
-            elif isinstance(src, str):
-                source_documents.append({
-                    "s3_path": src,
-                    "file_name": src,
-                    "display_title": src,
-                    "download_url": None,
-                })
-                s3_paths.append(src)
-
-        return {
-            "query": "",
-            "answer": answer,
-            "rag_answer": answer,
-            "web_answer": None,
-            "retrieval_count": len(sources),
-            "average_score": confidence_score,
-            "confidence_score": confidence_score,
-            "is_clarification": confidence == "low",
-            "follow_up_questions": [],
-            "model_used": model,
-            "token_usage": {
+        return _base_response(
+            answer=answer,
+            rag_answer=answer,
+            retrieval_count=len(sources),
+            confidence=confidence,
+            average_score=confidence_score,
+            confidence_score=confidence_score,
+            is_clarification=confidence == "low",
+            follow_up_questions=follow_ups,
+            model_used=model,
+            token_usage={
                 "total_tokens": 0,
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
             },
-            "token_tracking": None,
-            "s3_paths": s3_paths,
-            "s3_path_count": len(s3_paths),
-            "source_documents": source_documents,
-            "retrieved_chunks": [],
-            "debug_info": {
+            s3_paths=s3_paths,
+            s3_path_count=len(s3_paths),
+            source_documents=source_documents,
+            debug_info={
                 "agentic_steps": steps,
                 "agentic_cost_usd": cost,
             },
-            "processing_time_ms": elapsed_ms,
-            "project_id": None,
-            "session_id": None,
-            "session_stats": None,
-            "search_mode": "agentic",
-            "web_sources": [],
-            "web_source_count": 0,
-            "pin_status": None,
-            "success": True,
-            "engine_used": engine,
-            "fallback_used": fallback_used,
-            "agentic_confidence": confidence,
-            "error": error,
-        }
+            processing_time_ms=elapsed_ms,
+            search_mode="agentic",
+            engine_used=engine,
+            fallback_used=fallback_used,
+            agentic_confidence=confidence,
+            error=error,
+        )
