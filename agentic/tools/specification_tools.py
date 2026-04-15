@@ -17,14 +17,18 @@ logger = logging.getLogger("agentic_rag.tools.spec")
 COLLECTION = "specification"
 
 
-def list_specifications(project_id: int, limit: int = 50) -> List[Dict]:
+def list_specifications(project_id: int, limit: int = 50, section_title: str = None) -> List[Dict]:
     """List available specifications for a project."""
     project_id = validate_project_id(project_id)
     limit = validate_limit(limit, max_limit=100)
     coll = get_collection(COLLECTION)
 
+    match: Dict[str, Any] = {"projectId": project_id}
+    if section_title:
+        match["sectionTitle"] = re.compile(re.escape(section_title), re.IGNORECASE)
+
     pipeline = [
-        {"$match": {"projectId": project_id}},
+        {"$match": match},
         {"$group": {
             "_id": {"pdfName": "$pdfName", "sectionTitle": "$sectionTitle"},
             "specificationNumber": {"$first": "$specificationNumber"},
@@ -53,6 +57,8 @@ def search_specification_text(
     project_id: int,
     search_text: str,
     limit: int = 10,
+    section_title: str = None,
+    pdf_name: str = None,
 ) -> List[Dict]:
     """Search specification content by keywords."""
     project_id = validate_project_id(project_id)
@@ -62,8 +68,13 @@ def search_specification_text(
 
     # Try text search first (uses fullText_text index)
     try:
+        query: Dict[str, Any] = {"projectId": project_id, "$text": {"$search": search_text}}
+        if section_title:
+            query["sectionTitle"] = re.compile(re.escape(section_title), re.IGNORECASE)
+        if pdf_name:
+            query["pdfName"] = re.compile(re.escape(pdf_name), re.IGNORECASE)
         results = list(coll.find(
-            {"projectId": project_id, "$text": {"$search": search_text}},
+            query,
             {
                 "score": {"$meta": "textScore"},
                 "pdfName": 1, "sectionTitle": 1, "specificationNumber": 1,
@@ -86,12 +97,17 @@ def search_specification_text(
 
     # Fallback: regex search
     pattern = re.compile(re.escape(search_text), re.IGNORECASE)
+    fallback_query: Dict[str, Any] = {"projectId": project_id, "$or": [
+        {"text": pattern},
+        {"sectionTitle": pattern},
+        {"sectionText": pattern},
+    ]}
+    if section_title:
+        fallback_query["sectionTitle"] = re.compile(re.escape(section_title), re.IGNORECASE)
+    if pdf_name:
+        fallback_query["pdfName"] = re.compile(re.escape(pdf_name), re.IGNORECASE)
     results = list(coll.find(
-        {"projectId": project_id, "$or": [
-            {"text": pattern},
-            {"sectionTitle": pattern},
-            {"sectionText": pattern},
-        ]},
+        fallback_query,
         {"pdfName": 1, "sectionTitle": 1, "specificationNumber": 1,
          "text": 1, "page": 1, "_id": 0},
     ).limit(limit))

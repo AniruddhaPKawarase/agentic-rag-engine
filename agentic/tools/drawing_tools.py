@@ -21,13 +21,22 @@ logger = logging.getLogger("agentic_rag.tools.drawing")
 COLLECTION = "drawing"
 
 
-def list_project_drawings(project_id: int, set_id: int = None) -> List[Dict]:
+def list_project_drawings(
+    project_id: int,
+    set_id: int = None,
+    drawing_title: str = None,
+    drawing_name: str = None,
+) -> List[Dict]:
     """List unique drawings for a project with metadata."""
     project_id = validate_project_id(project_id)
     coll = get_collection(COLLECTION)
     match = {"projectId": project_id}
     if set_id:
         match["setId"] = set_id
+    if drawing_title:
+        match["drawingTitle"] = re.compile(re.escape(drawing_title), re.IGNORECASE)
+    if drawing_name:
+        match["drawingName"] = re.compile(re.escape(drawing_name), re.IGNORECASE)
 
     pipeline = [
         {"$match": match},
@@ -106,6 +115,8 @@ def search_drawing_text(
     project_id: int,
     search_text: str,
     limit: int = 10,
+    drawing_title: str = None,
+    drawing_name: str = None,
 ) -> List[Dict]:
     """Search drawing fragments for specific text content."""
     project_id = validate_project_id(project_id)
@@ -114,8 +125,14 @@ def search_drawing_text(
     coll = get_collection(COLLECTION)
     pattern = re.compile(re.escape(search_text), re.IGNORECASE)
 
+    match_stage = {"projectId": project_id, "text": pattern}
+    if drawing_title:
+        match_stage["drawingTitle"] = re.compile(re.escape(drawing_title), re.IGNORECASE)
+    if drawing_name:
+        match_stage["drawingName"] = re.compile(re.escape(drawing_name), re.IGNORECASE)
+
     pipeline = [
-        {"$match": {"projectId": project_id, "text": pattern}},
+        {"$match": match_stage},
         {"$group": {
             "_id": "$drawingId",
             "drawingTitle": {"$first": "$drawingTitle"},
@@ -149,6 +166,8 @@ def search_drawings_by_trade(
     project_id: int,
     trade: str,
     limit: int = 20,
+    drawing_title: str = None,
+    drawing_name: str = None,
 ) -> List[Dict]:
     """Search drawings by trade name (e.g., 'Electrical', 'Mechanical')."""
     project_id = validate_project_id(project_id)
@@ -156,15 +175,21 @@ def search_drawings_by_trade(
     coll = get_collection(COLLECTION)
     trade_regex = re.compile(re.escape(trade), re.IGNORECASE)
 
+    match_stage = {
+        "projectId": project_id,
+        "$or": [
+            {"setTrade": trade_regex},
+            {"trade": trade_regex},
+            {"trades.0": trade_regex},
+        ],
+    }
+    if drawing_title:
+        match_stage["drawingTitle"] = re.compile(re.escape(drawing_title), re.IGNORECASE)
+    if drawing_name:
+        match_stage["drawingName"] = re.compile(re.escape(drawing_name), re.IGNORECASE)
+
     pipeline = [
-        {"$match": {
-            "projectId": project_id,
-            "$or": [
-                {"setTrade": trade_regex},
-                {"trade": trade_regex},
-                {"trades.0": trade_regex},
-            ],
-        }},
+        {"$match": match_stage},
         {"$group": {
             "_id": "$drawingId",
             "drawingTitle": {"$first": "$drawingTitle"},
