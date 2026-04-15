@@ -85,6 +85,32 @@ def _base_response(**overrides: Any) -> dict:
     return base
 
 
+def _build_download_url(s3_path: str, pdf_name: str) -> str | None:
+    """Construct a public HTTPS download URL for a source document.
+
+    Uses the same logic as traditional engine metadata — the s3_path
+    contains ``bucket/prefix`` and the pdf_name is appended.
+
+    Format: https://{bucket}.s3.amazonaws.com/{prefix}/{pdf_name}.pdf
+    """
+    if not s3_path:
+        return None
+    # Use the traditional engine's builder if available
+    try:
+        from traditional.rag.retrieval.metadata import build_pdf_download_url
+        return build_pdf_download_url(s3_path, pdf_name or s3_path.rsplit("/", 1)[-1])
+    except ImportError:
+        pass
+    # Inline fallback: same logic
+    if not pdf_name:
+        pdf_name = s3_path.rsplit("/", 1)[-1] if "/" in s3_path else s3_path
+    bucket, _, key_prefix = s3_path.partition("/")
+    if not bucket:
+        return None
+    filename = pdf_name if pdf_name.lower().endswith(".pdf") else f"{pdf_name}.pdf"
+    return f"https://{bucket}.s3.amazonaws.com/{key_prefix}/{filename}"
+
+
 def _extract_source_documents(
     sources: list,
 ) -> tuple[list[dict], list[str]]:
@@ -93,19 +119,24 @@ def _extract_source_documents(
     Returns (source_documents, s3_paths) where each source_document has:
     s3_path, file_name, display_title, download_url, pdf_name, drawing_name,
     drawing_title, page — all fields the Angular frontend needs.
+
+    download_url is constructed from s3_path + pdf_name using the same
+    pattern as the traditional engine's metadata module.
     """
     source_documents: list[dict] = []
     s3_paths: list[str] = []
 
     for src in sources or []:
         if isinstance(src, dict):
-            s3_path = src.get("s3_path", src.get("sourceFile", ""))
+            s3_path = src.get("s3_path", src.get("s3BucketPath", src.get("sourceFile", "")))
+            pdf_name = src.get("pdfName", src.get("pdf_name", ""))
+            download_url = src.get("download_url") or _build_download_url(s3_path, pdf_name)
             source_documents.append({
                 "s3_path": s3_path,
-                "file_name": src.get("name", src.get("sourceFile", "")),
-                "display_title": src.get("sheet_number", src.get("name", "")),
-                "download_url": src.get("download_url"),
-                "pdf_name": src.get("pdfName", src.get("pdf_name", "")),
+                "file_name": src.get("name", src.get("sourceFile", pdf_name or "")),
+                "display_title": src.get("sheet_number", src.get("name", src.get("drawingName", ""))),
+                "download_url": download_url,
+                "pdf_name": pdf_name,
                 "drawing_name": src.get("drawingName", src.get("drawing_name", "")),
                 "drawing_title": src.get("drawingTitle", src.get("drawing_title", "")),
                 "page": src.get("page"),
@@ -113,12 +144,13 @@ def _extract_source_documents(
             if s3_path:
                 s3_paths.append(s3_path)
         elif isinstance(src, str):
+            download_url = _build_download_url(src, src)
             source_documents.append({
                 "s3_path": src,
                 "file_name": src,
                 "display_title": src,
-                "download_url": None,
-                "pdf_name": "",
+                "download_url": download_url,
+                "pdf_name": src,
                 "drawing_name": "",
                 "drawing_title": "",
                 "page": None,
@@ -777,8 +809,13 @@ class Orchestrator:
         model = getattr(result, "model", "")
         follow_ups = getattr(result, "follow_up_questions", []) or []
 
+        # Use structured source_docs (with s3BucketPath/pdfName) when available
+        # for proper download URL construction; fall back to plain string sources
+        source_docs = getattr(result, "source_docs", []) or []
+        raw_sources = source_docs if source_docs else sources
+
         confidence_score = CONFIDENCE_SCORE_MAP.get(confidence, 0.5)
-        source_documents, s3_paths = _extract_source_documents(sources)
+        source_documents, s3_paths = _extract_source_documents(raw_sources)
 
         return _base_response(
             answer=answer,

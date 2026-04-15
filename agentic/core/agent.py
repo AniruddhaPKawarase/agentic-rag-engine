@@ -217,6 +217,7 @@ class AgentResult:
     needs_escalation: bool = False
     escalation_reason: str = ""
     follow_up_questions: List[str] = field(default_factory=list)
+    source_docs: List[Dict] = field(default_factory=list)  # structured source info for download URLs
 
 
 def _execute_tool(name: str, args: Dict, scope: Optional[Dict] = None) -> str:
@@ -313,6 +314,7 @@ def run_agent(
 
     steps: List[AgentStep] = []
     sources: set = set()
+    source_docs: list = []  # structured source info for download URLs
     answer = ""
 
     for step_num in range(1, MAX_AGENT_STEPS + 1):
@@ -355,7 +357,7 @@ def run_agent(
                 # Track sources
                 try:
                     parsed = json.loads(tool_result)
-                    _extract_sources(parsed, sources)
+                    _extract_sources(parsed, sources, source_docs)
                 except (json.JSONDecodeError, TypeError):
                     pass
 
@@ -420,6 +422,15 @@ def run_agent(
         f"time={elapsed_ms}ms, confidence={confidence}"
     )
 
+    # Deduplicate source_docs by pdfName
+    seen_pdfs: set = set()
+    unique_source_docs: list = []
+    for doc in source_docs:
+        key = doc.get("pdfName") or doc.get("drawingName") or ""
+        if key and key not in seen_pdfs:
+            seen_pdfs.add(key)
+            unique_source_docs.append(doc)
+
     result = AgentResult(
         answer=answer,
         steps=steps,
@@ -434,6 +445,7 @@ def run_agent(
         needs_escalation=needs_escalation,
         escalation_reason=escalation_reason,
         follow_up_questions=follow_up_questions,
+        source_docs=unique_source_docs,
     )
 
     # Cache successful results
@@ -442,8 +454,13 @@ def run_agent(
     return result
 
 
-def _extract_sources(parsed: Any, sources: set) -> None:
-    """Extract source file references from tool results."""
+def _extract_sources(parsed: Any, sources: set, source_docs: list) -> None:
+    """Extract source references from tool results.
+
+    Populates *sources* (set of strings for confidence scoring) and
+    *source_docs* (list of dicts with s3BucketPath/pdfName/drawingName/
+    drawingTitle for download URL construction).
+    """
     if isinstance(parsed, list):
         for item in parsed:
             if isinstance(item, dict):
@@ -451,13 +468,32 @@ def _extract_sources(parsed: Any, sources: set) -> None:
                     val = item.get(key)
                     if val:
                         sources.add(val)
+                # Collect structured doc info for download URLs
+                if item.get("pdfName") or item.get("s3BucketPath") or item.get("drawingName"):
+                    source_docs.append({
+                        "s3BucketPath": item.get("s3BucketPath", ""),
+                        "pdfName": item.get("pdfName", ""),
+                        "drawingName": item.get("drawingName", ""),
+                        "drawingTitle": item.get("drawingTitle", ""),
+                        "sheet_number": item.get("sheet_number", ""),
+                        "page": item.get("page") or item.get("page_count"),
+                    })
     elif isinstance(parsed, dict):
         for key in ("drawingName", "pdfName", "sourceFile", "drawingTitle"):
             val = parsed.get(key)
             if val:
                 sources.add(val)
+        if parsed.get("pdfName") or parsed.get("s3BucketPath") or parsed.get("drawingName"):
+            source_docs.append({
+                "s3BucketPath": parsed.get("s3BucketPath", ""),
+                "pdfName": parsed.get("pdfName", ""),
+                "drawingName": parsed.get("drawingName", ""),
+                "drawingTitle": parsed.get("drawingTitle", ""),
+                "sheet_number": parsed.get("sheet_number", ""),
+                "page": parsed.get("page"),
+            })
         if "results" in parsed and isinstance(parsed["results"], list):
-            _extract_sources(parsed["results"], sources)
+            _extract_sources(parsed["results"], sources, source_docs)
 
 
 def _compute_confidence(
