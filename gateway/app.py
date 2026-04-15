@@ -94,15 +94,21 @@ app = FastAPI(
 )
 
 # --- CORS ---
+# Starlette CORSMiddleware treats wildcard patterns (https://*.domain.com)
+# as LITERAL strings, not glob patterns. Use allow_origin_regex for
+# subdomain matching, plus explicit origins for localhost dev servers.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://ifieldsmart.com",
-        "https://*.ifieldsmart.com",
         "https://ai5.ifieldsmart.com",
+        "https://sandbox.ifieldsmart.ai",
         "http://localhost:3000",
+        "http://localhost:4200",
         "http://localhost:8080",
+        "http://localhost:4300",
     ],
+    allow_origin_regex=r"https://.*\.ifieldsmart\.(com|ai)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
