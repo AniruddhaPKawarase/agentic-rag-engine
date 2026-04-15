@@ -179,3 +179,58 @@ def search_drawings_by_trade(
     results = list(coll.aggregate(pipeline, allowDiskUse=True, maxTimeMS=30000))
     logger.info(f"search_drawings_by_trade: project={project_id}, trade={trade}, found={len(results)}")
     return results
+
+
+def list_unique_drawing_titles(
+    project_id: int,
+    set_id: int = None,
+) -> List[Dict]:
+    """Get unique drawingTitle + drawingName pairs for a project.
+
+    Used by the orchestrator for document discovery when the agent cannot
+    answer a question — presents available document groups to the user.
+
+    Returns a deduplicated list sorted by drawingTitle, with:
+    - drawingTitle: human-readable title (e.g. "Mechanical Lower Level Plan")
+    - drawingName: drawing identifier (e.g. "M-101")
+    - trade: trade name (e.g. "Mechanical")
+    - pdfName: associated PDF filename
+    - fragment_count: number of OCR fragments for this drawing
+    """
+    project_id = validate_project_id(project_id)
+    coll = get_collection(COLLECTION)
+    match: Dict[str, Any] = {"projectId": project_id}
+    if set_id:
+        match["setId"] = int(set_id)
+
+    pipeline = [
+        {"$match": match},
+        {"$group": {
+            "_id": {"drawingTitle": "$drawingTitle", "drawingName": "$drawingName"},
+            "trade": {"$first": {"$ifNull": ["$setTrade", "$trade"]}},
+            "pdfName": {"$first": "$pdfName"},
+            "fragment_count": {"$sum": 1},
+        }},
+        {"$project": {
+            "_id": 0,
+            "drawingTitle": "$_id.drawingTitle",
+            "drawingName": "$_id.drawingName",
+            "trade": 1,
+            "pdfName": 1,
+            "fragment_count": 1,
+        }},
+        {"$sort": {"drawingTitle": 1}},
+    ]
+
+    results = list(coll.aggregate(pipeline, allowDiskUse=True, maxTimeMS=15000))
+
+    # Handle null/empty titles — fall back to drawingName or pdfName
+    for r in results:
+        if not r.get("drawingTitle"):
+            r["drawingTitle"] = r.get("drawingName") or r.get("pdfName") or "Untitled"
+
+    logger.info(
+        "list_unique_drawing_titles: project=%d, found=%d unique titles",
+        project_id, len(results),
+    )
+    return results

@@ -145,3 +145,51 @@ def get_specification_section(
 
     logger.info(f"get_specification_section: project={project_id}, found={len(combined)}")
     return combined
+
+
+def list_unique_spec_titles(
+    project_id: int,
+) -> List[Dict]:
+    """Get unique sectionTitle + pdfName pairs for a project's specifications.
+
+    Used by the orchestrator for document discovery when the agent cannot
+    answer — presents available specification sections to the user.
+
+    Returns a deduplicated list sorted by sectionTitle, with:
+    - sectionTitle: spec section name (e.g. "23 31 00 - HVAC Ducts")
+    - pdfName: associated PDF filename
+    - specificationNumber: CSI number
+    - fragment_count: number of fragments for this section
+    """
+    project_id = validate_project_id(project_id)
+    coll = get_collection(COLLECTION)
+
+    pipeline = [
+        {"$match": {"projectId": project_id}},
+        {"$group": {
+            "_id": {"sectionTitle": "$sectionTitle", "pdfName": "$pdfName"},
+            "specificationNumber": {"$first": "$specificationNumber"},
+            "fragment_count": {"$sum": 1},
+        }},
+        {"$project": {
+            "_id": 0,
+            "sectionTitle": "$_id.sectionTitle",
+            "pdfName": "$_id.pdfName",
+            "specificationNumber": 1,
+            "fragment_count": 1,
+        }},
+        {"$sort": {"sectionTitle": 1}},
+    ]
+
+    results = list(coll.aggregate(pipeline, maxTimeMS=15000))
+
+    # Handle null/empty titles — fall back to pdfName
+    for r in results:
+        if not r.get("sectionTitle"):
+            r["sectionTitle"] = r.get("pdfName") or "Untitled Section"
+
+    logger.info(
+        "list_unique_spec_titles: project=%d, found=%d unique sections",
+        project_id, len(results),
+    )
+    return results
