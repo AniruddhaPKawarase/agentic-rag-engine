@@ -80,6 +80,10 @@ def _base_response(**overrides: Any) -> dict:
         "fallback_used": False,
         "agentic_confidence": None,
         "error": None,
+        # --- Agent switching (RAG <-> DocQA) ---
+        "active_agent": "rag",
+        "suggest_switch": None,
+        "selected_document": None,
     }
     base.update(overrides)
     return base
@@ -361,17 +365,19 @@ class Orchestrator:
         set_id: Optional[int] = None,
         conversation_history: Optional[list] = None,
         search_mode: Optional[str] = None,
+        docqa_document: Optional[dict] = None,
         **kwargs: Any,
     ) -> dict:
         """Route a query through the appropriate engine(s).
 
         Flow
         ----
-        1. If ``search_mode="web"`` — run web search only.
-        2. If ``search_mode="hybrid"`` — run agentic + web in parallel.
-        3. Check session scope — if active, inject scope filters into agentic.
-        4. Try agentic first.
-        5. If agentic fails → document discovery (list available drawing titles)
+        1. If ``search_mode="docqa"`` — route to Document QA agent.
+        2. If ``search_mode="web"`` — run web search only.
+        3. If ``search_mode="hybrid"`` — run agentic + web in parallel.
+        4. Check session scope — if active, inject scope filters into agentic.
+        5. Try agentic first.
+        6. If agentic fails → document discovery (list available drawing titles)
            instead of blind FAISS fallback.
         """
         start = time.monotonic()
@@ -381,6 +387,16 @@ class Orchestrator:
         self._last_query = query
         self._last_project_id = project_id
         self._last_session_id = session_id
+
+        # --- DocQA mode: route to Document QA agent ---
+        if search_mode == "docqa":
+            return await self._run_docqa(
+                query=query,
+                project_id=project_id,
+                session_id=session_id,
+                docqa_document=docqa_document,
+                start=start,
+            )
 
         # --- Web-only mode ---
         if search_mode == "web":
@@ -664,6 +680,224 @@ class Orchestrator:
             })
 
         return result
+
+    # ------------------------------------------------------------------
+    # Document QA Agent bridge
+    # ------------------------------------------------------------------
+
+    async def _run_docqa(
+        self,
+        query: str,
+        project_id: int,
+        session_id: Optional[str],
+        docqa_document: Optional[dict],
+        start: float,
+    ) -> dict:
+        """Route query to the Document QA agent.
+
+        Two modes:
+        1. First call with docqa_document → download PDF from S3, upload to DocQA
+        2. Follow-up call without docqa_document → forward query to existing DocQA session
+        """
+        from gateway.docqa_client import upload_and_query, query_document, check_health
+        from gateway.intent_classifier import classify_intent
+
+        elapsed_ms = lambda: int((time.monotonic() - start) * 1000)
+
+        # Check DocQA health
+        if not await check_health():
+            return _base_response(
+                query=query,
+                processing_time_ms=elapsed_ms(),
+                success=False,
+                error="Document QA agent is not running. Please try again later.",
+                search_mode="docqa",
+                engine_used="docqa",
+            )
+
+        # Intent classification for hybrid switching
+        intent = classify_intent(query, active_agent="docqa")
+        if intent == "exit_docqa":
+            return _base_response(
+                query=query,
+                answer="Switched back to project search mode. Ask any question about your project.",
+                processing_time_ms=elapsed_ms(),
+                search_mode="rag",
+                engine_used="rag",
+                active_agent="rag",
+            )
+        if intent == "suggest_switch_to_rag":
+            return _base_response(
+                query=query,
+                answer=(
+                    "This question seems to be about the broader project, not just the "
+                    "selected document. Would you like to switch back to project search? "
+                    "Click 'Back to Project Search' or rephrase your question for this document."
+                ),
+                processing_time_ms=elapsed_ms(),
+                search_mode="docqa",
+                engine_used="docqa",
+                suggest_switch="rag",
+            )
+
+        # Resolve DocQA session from RAG session metadata
+        docqa_session_id = None
+        if session_id:
+            try:
+                from shared.session.manager import get_meta
+                meta = get_meta(session_id)
+                docqa_session_id = getattr(meta, "docqa_session_id", None)
+            except (ImportError, Exception):
+                pass
+
+        # Mode 1: New document upload
+        if docqa_document:
+            s3_path = docqa_document.get("s3_path", "")
+            file_name = docqa_document.get("file_name") or s3_path.rsplit("/", 1)[-1]
+            download_url = docqa_document.get("download_url")
+
+            if not file_name.lower().endswith(".pdf"):
+                file_name = f"{file_name}.pdf"
+
+            # Download the PDF
+            tmp_path = None
+            try:
+                from shared.s3_client import download_from_s3, download_from_url
+                tmp_path = download_from_s3(s3_path)
+                if tmp_path is None and download_url:
+                    tmp_path = download_from_url(download_url)
+            except ImportError:
+                logger.warning("s3_client not available, trying download_url")
+                if download_url:
+                    try:
+                        from shared.s3_client import download_from_url
+                        tmp_path = download_from_url(download_url)
+                    except ImportError:
+                        pass
+
+            if tmp_path is None:
+                return _base_response(
+                    query=query,
+                    answer=(
+                        f"Could not download the document '{file_name}'. "
+                        "S3 access may not be configured. Please check AWS credentials."
+                    ),
+                    processing_time_ms=elapsed_ms(),
+                    success=False,
+                    error="S3 download failed",
+                    search_mode="docqa",
+                    engine_used="docqa",
+                )
+
+            # Upload to DocQA and ask the question
+            try:
+                result = await upload_and_query(
+                    file_path=tmp_path,
+                    file_name=file_name,
+                    query=query,
+                    session_id=docqa_session_id,
+                )
+            finally:
+                # Clean up temp file
+                import os
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
+            if result.get("error"):
+                return _base_response(
+                    query=query,
+                    processing_time_ms=elapsed_ms(),
+                    success=False,
+                    error=result["error"],
+                    search_mode="docqa",
+                    engine_used="docqa",
+                )
+
+            # Store DocQA session ID in RAG session metadata
+            new_docqa_session = result.get("session_id")
+            if new_docqa_session and session_id:
+                try:
+                    from shared.session.manager import get_meta
+                    meta = get_meta(session_id)
+                    meta.docqa_session_id = new_docqa_session
+                except (ImportError, Exception):
+                    pass
+
+            return self._format_docqa_response(result, query, elapsed_ms(), file_name)
+
+        # Mode 2: Follow-up query on existing DocQA session
+        if docqa_session_id:
+            result = await query_document(docqa_session_id, query)
+            if result.get("error"):
+                return _base_response(
+                    query=query,
+                    processing_time_ms=elapsed_ms(),
+                    success=False,
+                    error=result["error"],
+                    search_mode="docqa",
+                    engine_used="docqa",
+                )
+            return self._format_docqa_response(result, query, elapsed_ms())
+
+        # No document selected and no existing DocQA session
+        return _base_response(
+            query=query,
+            answer=(
+                "No document is currently selected for deep-dive analysis. "
+                "Please select a reference document from the source list first, "
+                "or switch back to project search mode."
+            ),
+            processing_time_ms=elapsed_ms(),
+            search_mode="docqa",
+            engine_used="docqa",
+            needs_document_selection=True,
+        )
+
+    def _format_docqa_response(
+        self,
+        docqa_result: dict,
+        query: str,
+        elapsed_ms: int,
+        file_name: str = "",
+    ) -> dict:
+        """Convert DocQA agent response to the unified RAG response format."""
+        sources = docqa_result.get("sources", [])
+        source_documents = [
+            {
+                "s3_path": s.get("file_name", ""),
+                "file_name": s.get("file_name", ""),
+                "display_title": s.get("file_name", ""),
+                "download_url": None,
+                "page": s.get("page_number"),
+                "drawing_name": "",
+                "drawing_title": "",
+                "text_preview": s.get("text_preview", "")[:200],
+                "relevance_score": s.get("score", 0),
+            }
+            for s in sources
+        ]
+
+        return _base_response(
+            query=query,
+            answer=docqa_result.get("answer", ""),
+            confidence="high" if docqa_result.get("groundedness_score", 0) > 0.5 else "medium",
+            confidence_score=docqa_result.get("groundedness_score", 0.0),
+            follow_up_questions=docqa_result.get("follow_up_questions", []),
+            source_documents=source_documents,
+            s3_paths=[s.get("file_name", "") for s in sources],
+            s3_path_count=len(sources),
+            model_used=docqa_result.get("model_used", "gpt-4o"),
+            token_usage=docqa_result.get("token_usage"),
+            processing_time_ms=elapsed_ms,
+            search_mode="docqa",
+            engine_used="docqa",
+            session_id=docqa_result.get("session_id", ""),
+            is_clarification=docqa_result.get("needs_clarification", False),
+            active_agent="docqa",
+            selected_document=file_name,
+        )
 
     # ------------------------------------------------------------------
     # Web search (shared by web-only and hybrid modes)

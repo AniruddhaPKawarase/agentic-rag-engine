@@ -21,19 +21,28 @@ class ConversationMessage(BaseModel):
     content: str = Field(max_length=10000)
 
 
+class DocQADocument(BaseModel):
+    """Document to send to the Document QA agent for deep-dive analysis."""
+
+    s3_path: str = Field(..., min_length=1, max_length=500)
+    file_name: Optional[str] = None
+    download_url: Optional[str] = None
+
+
 class QueryRequest(BaseModel):
     """Inbound query from the client."""
 
     query: str = Field(..., min_length=1, max_length=2000)
     project_id: int = Field(..., ge=1, le=999999)
     session_id: Optional[str] = None
-    search_mode: Optional[str] = None
+    search_mode: Optional[str] = None  # "rag", "web", "hybrid", "docqa"
     generate_document: bool = True
     filter_source_type: Optional[str] = None
     filter_drawing_name: Optional[str] = None
     set_id: Optional[int] = None
     conversation_history: Optional[list[ConversationMessage]] = None
     engine: Optional[str] = None
+    docqa_document: Optional[DocQADocument] = None  # for search_mode="docqa"
 
 
 class UnifiedResponse(BaseModel):

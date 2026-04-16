@@ -131,6 +131,7 @@ async def query(request: Request, body: QueryRequest) -> dict:
         generate_document=body.generate_document,
         filter_source_type=body.filter_source_type,
         filter_drawing_name=body.filter_drawing_name,
+        docqa_document=body.docqa_document.model_dump() if body.docqa_document else None,
     )
     return result
 
