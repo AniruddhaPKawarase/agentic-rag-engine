@@ -86,51 +86,29 @@ def _base_response(**overrides: Any) -> dict:
 
 
 def _build_download_url(s3_path: str, pdf_name: str) -> str | None:
-    """Generate a pre-signed S3 download URL for a source document.
+    """Construct a public HTTPS download URL for a source document.
 
-    The s3_path from MongoDB has format: ``bucket/prefix/key``
-    (e.g., ``ifieldsmart/projectslug/Drawings/pdfhash``).
+    Uses the same logic as traditional engine metadata — the s3_path
+    contains ``bucket/prefix`` and the pdf_name is appended.
 
-    We extract the bucket name and construct the full S3 object key,
-    then generate a pre-signed URL valid for 24 hours using boto3.
-
-    Falls back to a plain HTTPS URL if signing fails (e.g., no credentials).
+    Format: https://{bucket}.s3.amazonaws.com/{prefix}/{pdf_name}.pdf
     """
     if not s3_path:
         return None
-
-    # Parse bucket and key prefix from s3_path
-    bucket, _, key_prefix = s3_path.partition("/")
-    if not bucket or not key_prefix:
-        return None
-
-    # Build the full S3 object key
-    if not pdf_name:
-        pdf_name = key_prefix.rsplit("/", 1)[-1] if "/" in key_prefix else key_prefix
-    filename = pdf_name if pdf_name.lower().endswith(".pdf") else f"{pdf_name}.pdf"
-    s3_key = f"{key_prefix}/{filename}"
-
-    # Try pre-signed URL (24 hour expiry)
+    # Use the traditional engine's builder if available
     try:
-        import boto3
-        import os
-        client = boto3.client(
-            "s3",
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", ""),
-            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", ""),
-            region_name=os.getenv("S3_REGION", "us-east-1"),
-        )
-        url = client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": bucket, "Key": s3_key},
-            ExpiresIn=86400,  # 24 hours
-        )
-        return url
-    except Exception as exc:
-        logger.warning("Pre-signed URL generation failed: %s", exc)
-
-    # Fallback: plain HTTPS URL (will get AccessDenied on private buckets)
-    return f"https://{bucket}.s3.amazonaws.com/{s3_key}"
+        from traditional.rag.retrieval.metadata import build_pdf_download_url
+        return build_pdf_download_url(s3_path, pdf_name or s3_path.rsplit("/", 1)[-1])
+    except ImportError:
+        pass
+    # Inline fallback: same logic
+    if not pdf_name:
+        pdf_name = s3_path.rsplit("/", 1)[-1] if "/" in s3_path else s3_path
+    bucket, _, key_prefix = s3_path.partition("/")
+    if not bucket:
+        return None
+    filename = pdf_name if pdf_name.lower().endswith(".pdf") else f"{pdf_name}.pdf"
+    return f"https://{bucket}.s3.amazonaws.com/{key_prefix}/{filename}"
 
 
 def _extract_source_documents(
@@ -179,18 +157,7 @@ def _extract_source_documents(
             })
             s3_paths.append(src)
 
-    # Deduplicate source_documents by display_title
-    seen = set()
-    deduped = []
-    for doc in source_documents:
-        title = doc.get("display_title") or doc.get("drawing_title") or doc.get("file_name") or doc.get("s3_path") or ""
-        key = title.lower().strip()
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        deduped.append(doc)
-
-    return deduped, list(dict.fromkeys(s3_paths))
+    return source_documents, s3_paths
 
 
 # ---------------------------------------------------------------------------
@@ -671,72 +638,28 @@ class Orchestrator:
         drawings: list[dict],
         specifications: list[dict],
     ) -> list[dict]:
-        """Merge drawing and spec title lists into a deduplicated available_documents list.
+        """Merge drawing and spec title lists into a unified available_documents list.
 
         Groups by document type, includes trade info for drawings.
-        Deduplicates by title, skips entries with no usable identifier.
         """
         result: list[dict] = []
-        seen: set[str] = set()
 
         for d in drawings:
-            name = (d.get("drawingName") or "").strip()
-            title = (d.get("drawingTitle") or d.get("display_title") or "").strip()
-
-            # Build a human-readable drawing_title
-            if name and title:
-                display = f"{name} — {title}"
-            elif name:
-                display = name
-            elif title:
-                display = title
-            else:
-                display = (d.get("pdfName") or "").strip()
-                if not display:
-                    continue  # skip unidentifiable entries
-
-            dedup_key = display.lower()
-            if dedup_key in seen:
-                continue
-            seen.add(dedup_key)
-
             result.append({
                 "type": "drawing",
-                "drawing_title": display,
-                "drawing_name": name,
+                "drawing_title": d.get("drawingTitle", ""),
+                "drawing_name": d.get("drawingName", ""),
                 "trade": d.get("trade", ""),
                 "pdf_name": d.get("pdfName", ""),
                 "fragment_count": d.get("fragment_count", 0),
             })
 
         for s in specifications:
-            section = (s.get("sectionTitle") or "").strip()
-            spec_num = (s.get("specificationNumber") or "").strip()
-            pdf = (s.get("pdfName") or "").strip()
-
-            # Build a human-readable drawing_title for specifications
-            if spec_num and section:
-                display = f"{spec_num} — {section}"
-            elif section and section.lower() not in ("specification", "unknown"):
-                display = section
-            elif spec_num:
-                display = spec_num
-            elif pdf:
-                display = pdf
-            else:
-                continue  # skip unidentifiable entries
-
-            dedup_key = display.lower()
-            if dedup_key in seen:
-                continue
-            seen.add(dedup_key)
-
             result.append({
                 "type": "specification",
-                "drawing_title": display,
-                "section_title": section,
-                "pdf_name": pdf,
-                "specification_number": spec_num,
+                "section_title": s.get("sectionTitle", ""),
+                "pdf_name": s.get("pdfName", ""),
+                "specification_number": s.get("specificationNumber", ""),
                 "fragment_count": s.get("fragment_count", 0),
             })
 

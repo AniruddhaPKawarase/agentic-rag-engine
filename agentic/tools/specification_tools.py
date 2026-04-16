@@ -48,41 +48,8 @@ def list_specifications(project_id: int, limit: int = 50, section_title: str = N
         {"$limit": limit},
     ]
 
-    raw_results = list(coll.aggregate(pipeline, maxTimeMS=20000))
-
-    # Deduplicate by sectionTitle and build human-readable display_title
-    seen_titles = set()
-    results = []
-    for doc in raw_results:
-        section = (doc.get("sectionTitle") or "").strip()
-        spec_num = (doc.get("specificationNumber") or "").strip()
-        pdf = (doc.get("pdfName") or "").strip()
-
-        # Build a human-readable display_title
-        if spec_num and section:
-            display_title = f"{spec_num} — {section}"
-        elif section:
-            display_title = section
-        elif spec_num:
-            display_title = spec_num
-        elif pdf:
-            display_title = pdf
-        else:
-            continue  # skip entries with no identifying info
-
-        # Skip generic/empty titles
-        if display_title.lower() in ("specification", "unknown", ""):
-            display_title = pdf if pdf else f"Specification ({spec_num})"
-
-        dedup_key = display_title.lower()
-        if dedup_key in seen_titles:
-            continue
-        seen_titles.add(dedup_key)
-
-        doc["display_title"] = display_title
-        results.append(doc)
-
-    logger.info(f"list_specifications: project={project_id}, found={len(results)} (deduplicated from {len(raw_results)})")
+    results = list(coll.aggregate(pipeline, maxTimeMS=20000))
+    logger.info(f"list_specifications: project={project_id}, found={len(results)}")
     return results
 
 
