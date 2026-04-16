@@ -67,8 +67,34 @@ def list_project_drawings(
         {"$limit": 200},
     ]
 
-    results = list(coll.aggregate(pipeline, allowDiskUse=True, maxTimeMS=30000))
-    logger.info(f"list_project_drawings: project={project_id}, found={len(results)}")
+    raw_results = list(coll.aggregate(pipeline, allowDiskUse=True, maxTimeMS=30000))
+
+    # Deduplicate by drawingTitle — keep one entry per unique title
+    seen_titles = set()
+    results = []
+    for doc in raw_results:
+        title = (doc.get("drawingTitle") or "").strip()
+        name = (doc.get("drawingName") or "").strip()
+
+        # Build a human-readable display_title
+        if name and title:
+            display_title = f"{name} — {title}"
+        elif name:
+            display_title = name
+        elif title:
+            display_title = title
+        else:
+            display_title = doc.get("pdfName", f"Drawing {doc.get('drawingId', '')}")
+
+        dedup_key = display_title.lower()
+        if dedup_key in seen_titles:
+            continue
+        seen_titles.add(dedup_key)
+
+        doc["display_title"] = display_title
+        results.append(doc)
+
+    logger.info(f"list_project_drawings: project={project_id}, found={len(results)} (deduplicated from {len(raw_results)})")
     return results
 
 
