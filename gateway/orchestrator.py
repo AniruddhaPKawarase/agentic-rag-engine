@@ -90,22 +90,82 @@ def _base_response(**overrides: Any) -> dict:
 
 
 def _build_download_url(s3_path: str, pdf_name: str) -> str | None:
-    """Construct a public HTTPS download URL for a source document.
+    """Generate a pre-signed HTTPS download URL for a source document.
 
-    Uses the same logic as traditional engine metadata — the s3_path
-    contains ``bucket/prefix`` and the pdf_name is appended.
+    Uses AWS SigV4 to produce a time-limited (default 1 hour) URL that
+    works with private S3 buckets. The URL includes signed headers that
+    authorize the request without exposing AWS credentials.
 
-    Format: https://{bucket}.s3.amazonaws.com/{prefix}/{pdf_name}.pdf
+    The S3 key is used as-is (not parsed for bucket). The bucket comes
+    from the ``S3_BUCKET_NAME`` environment variable.
+
+    If S3 credentials are unavailable, falls back to a plain public-style
+    URL (which will 403 on private buckets but preserves backward compat).
+
+    Returns
+    -------
+    str or None
+        Pre-signed URL valid for ``DOWNLOAD_URL_EXPIRATION_SECONDS`` (default 3600).
     """
-    if not s3_path:
+    if not s3_path and not pdf_name:
         return None
-    # Use the traditional engine's builder if available
+
+    import os as _os
+    # s3_path from MongoDB is typically "bucket/prefix/to/folder" (s3BucketPath field).
+    # pdf_name is the filename without extension.
+    # Full key = stripped(s3BucketPath) + "/" + pdfName + ".pdf"
+    bucket_env = _os.environ.get("S3_BUCKET_NAME", "ifieldsmart")
+
+    s3_key = (s3_path or "").lstrip("/")
+    # If s3_path starts with the bucket name, strip it
+    if s3_key.startswith(f"{bucket_env}/"):
+        s3_key = s3_key[len(bucket_env) + 1:]
+    elif s3_key == bucket_env:
+        s3_key = ""
+
+    # Compose with pdf_name
+    if pdf_name:
+        filename = pdf_name if pdf_name.lower().endswith(".pdf") else f"{pdf_name}.pdf"
+        if s3_key and not s3_key.endswith("/"):
+            s3_key = f"{s3_key}/{filename}"
+        elif s3_key:
+            s3_key = f"{s3_key}{filename}"
+        else:
+            s3_key = filename
+
+    if not s3_key:
+        return None
+
+    # Try to generate a pre-signed URL using SigV4
+    try:
+        import boto3
+        from botocore.config import Config
+
+        region = _os.environ.get("AWS_DEFAULT_REGION") or _os.environ.get("S3_REGION", "us-east-1")
+        expires = int(_os.environ.get("DOWNLOAD_URL_EXPIRATION_SECONDS", "3600"))
+
+        client = boto3.client(
+            "s3",
+            region_name=region,
+            config=Config(signature_version="s3v4"),
+        )
+        url = client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket_env, "Key": s3_key},
+            ExpiresIn=expires,
+        )
+        return url
+    except Exception as exc:
+        logger.debug("Presigned URL generation failed for %s: %s", s3_key, exc)
+
+    # Fallback: plain public-style URL (works only if bucket allows public reads)
     try:
         from traditional.rag.retrieval.metadata import build_pdf_download_url
         return build_pdf_download_url(s3_path, pdf_name or s3_path.rsplit("/", 1)[-1])
     except ImportError:
         pass
-    # Inline fallback: same logic
+
+    # Final inline fallback
     if not pdf_name:
         pdf_name = s3_path.rsplit("/", 1)[-1] if "/" in s3_path else s3_path
     bucket, _, key_prefix = s3_path.partition("/")

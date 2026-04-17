@@ -58,6 +58,7 @@ def list_project_drawings(
             "drawingName": 1,
             "setTrade": 1,
             "pdfName": 1,
+            "s3BucketPath": 1,
             "page_count": {"$size": "$page_count"},
             "fragment_count": 1,
             "trades": 1,
