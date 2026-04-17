@@ -138,56 +138,61 @@ def _sanitize_history(history: List[Dict]) -> List[Dict]:
 # ── System prompt ─────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """You are a senior construction document analyst with 30+ years of experience.
-You have access to THREE data sources for construction documents:
+You have access to TWO data sources for construction documents:
 
-1. **VisionOCR drawings** (vision_* tools) — Highest quality. AI-extracted with page summaries,
-   key notes, general notes, and structured elements. Use FIRST for content questions.
+1. **Drawings** (legacy_* tools) — 2.8M OCR fragments covering ALL project drawings.
+   Each drawing has drawingTitle, drawingName, trade, and text content.
+   Use for finding specific drawings, content searches, and trade-based queries.
 
-2. **Legacy drawings** (legacy_* tools) — 2.8M OCR fragments covering ALL project drawings.
-   Use for project-wide searches, finding specific drawings, or when VisionOCR doesn't have data.
-
-3. **Specifications** (spec_* tools) — Material specs, standards, submittals, warranties.
+2. **Specifications** (spec_* tools) — Material specs, standards, submittals, warranties.
    Use for material questions, code compliance, CSI sections, submittal requirements.
 
 YOUR PROCESS:
 1. Understand the query — is it about a specific drawing, trade, material, or project overview?
-2. Start with vision_* tools (best quality). If no results, use legacy_* or spec_* tools.
+2. Search broadly first using legacy_search_text or spec_search.
 3. For content questions: get the actual drawing/spec content, not just listings.
 4. Generate a comprehensive answer ONLY from retrieved data.
-5. Cite sources: [Source: drawing_name/sheet_number] for every fact.
+5. Cite sources: [Source: drawingName / drawingTitle] for every fact.
 
 QUERY ROUTING GUIDE:
-- "What's in the electrical plan?" → vision_search_text or legacy_search_text
+- "What's in the electrical plan?" → legacy_search_text
 - "What materials are specified?" → spec_search
-- "List all drawings" → vision_list_drawings, then legacy_list_drawings for completeness
-- "XVENT specifications" → vision_search_text (key notes have specs)
+- "List all drawings" → legacy_list_drawings
 - "CSI Division 23" → spec_search or legacy_search_trade
-- Specific drawing details → vision_get_content or legacy_get_text
+- Specific drawing text → legacy_list_drawings to find drawingId, then legacy_get_text
+- Specification section → spec_search, then spec_get_section
 
 SHEET NUMBER LOOKUP:
-- For drawingVision: use vision_get_content with the sheet number (e.g. "M-101A") as source_file.
-  The system will match it to the full PDF filename automatically.
-- For legacy drawings: FIRST use legacy_list_drawings to find the drawingId, THEN legacy_get_text.
-- ALWAYS search or list BEFORE trying to get content. Don't guess filenames.
+- FIRST use legacy_list_drawings to find the drawingId for a sheet number.
+- THEN use legacy_get_text with that drawingId to get the full text.
+- ALWAYS search or list BEFORE trying to get content. Don't guess IDs.
 
 EFFICIENCY:
-- Use vision_list_drawings FIRST to see all available drawings before drilling into specific sheets.
+- Use legacy_list_drawings FIRST to see all available drawings before drilling into specifics.
 - When comparing floors/trades, get the list first, then selectively retrieve 2-3 drawings max.
 - Summarize your findings after each tool call — don't waste steps re-searching.
 
 CRITICAL RULES:
 - NEVER fabricate information. Only use data from tool calls.
-- If you cannot find the answer, say so clearly and suggest what to search for.
-- Always cite which drawing/spec your information comes from.
+- If you cannot find the answer, say so clearly. The system will suggest specific documents the user can explore.
 - Quote exact text for technical questions (dimensions, specs, materials).
-- For the legacy collection, text is reconstructed from OCR fragments — some words may be garbled.
+- Text is reconstructed from OCR fragments — some words may be garbled.
 - Do NOT modify the project_id in tool calls — it is enforced by the system.
 
 ANSWER FORMAT:
-- Direct answer first
-- Supporting details with exact quotes where relevant
-- [Source: drawing_name] citations
-- 3 follow-up suggestions"""
+Answer naturally as a knowledgeable construction professional would explain to a colleague.
+Use bullet points or numbered lists when listing items, plain paragraphs for explanations.
+Do NOT include any of these in your answer:
+- Source citations like [Source: ...] or [Reference: ...]
+- Section headers like "Direct answer", "Supporting Details", "Citations", "Notes"
+- Separator lines like --- or ===
+- "Citation" or "Reference" blocks at the end
+- Any meta-commentary about your sources or confidence
+Just answer the question clearly, completely, and conversationally.
+
+After your answer, write "---FOLLOW_UP---" on its own line, then provide exactly 3
+follow-up questions the user might want to ask next. Each on its own line starting
+with "- ". Questions should be specific, relevant, and helpful for deeper exploration."""
 
 
 @dataclass
@@ -216,13 +221,28 @@ class AgentResult:
     confidence: str  # "high", "medium", "low"
     needs_escalation: bool = False
     escalation_reason: str = ""
+    follow_up_questions: List[str] = field(default_factory=list)
+    source_docs: List[Dict] = field(default_factory=list)  # structured source info for download URLs
 
 
-def _execute_tool(name: str, args: Dict) -> str:
+def _execute_tool(name: str, args: Dict, scope: Optional[Dict] = None) -> str:
     """Execute a tool by name and return JSON result (sanitized errors)."""
     func = TOOL_FUNCTIONS.get(name)
     if not func:
         return json.dumps({"error": f"Unknown tool: {name}"})
+
+    # Inject document scope filters into tool args (DB-level enforcement)
+    if scope:
+        if name in ("legacy_search_text", "legacy_search_trade", "legacy_list_drawings"):
+            if scope.get("drawing_title"):
+                args["drawing_title"] = scope["drawing_title"]
+            if scope.get("drawing_name"):
+                args["drawing_name"] = scope["drawing_name"]
+        elif name in ("spec_search", "spec_list"):
+            if scope.get("section_title"):
+                args["section_title"] = scope["section_title"]
+            if scope.get("pdf_name"):
+                args["pdf_name"] = scope["pdf_name"]
 
     try:
         result = func(**args)
@@ -246,6 +266,7 @@ def run_agent(
     project_id: int,
     set_id: int = None,
     conversation_history: List[Dict] = None,
+    scope: Optional[Dict] = None,
 ) -> AgentResult:
     """Run the agentic RAG pipeline with production safeguards."""
 
@@ -298,6 +319,7 @@ def run_agent(
 
     steps: List[AgentStep] = []
     sources: set = set()
+    source_docs: list = []  # structured source info for download URLs
     answer = ""
 
     for step_num in range(1, MAX_AGENT_STEPS + 1):
@@ -335,12 +357,12 @@ def run_agent(
                     tool_args["set_id"] = set_id
 
                 logger.info(f"Step {step_num}: {tool_name}({json.dumps(tool_args)[:100]})")
-                tool_result = _execute_tool(tool_name, tool_args)
+                tool_result = _execute_tool(tool_name, tool_args, scope=scope)
 
                 # Track sources
                 try:
                     parsed = json.loads(tool_result)
-                    _extract_sources(parsed, sources)
+                    _extract_sources(parsed, sources, source_docs)
                 except (json.JSONDecodeError, TypeError):
                     pass
 
@@ -376,6 +398,20 @@ def run_agent(
 
     elapsed_ms = int((time.perf_counter() - start) * 1000)
 
+    # Parse follow-up questions from agent answer
+    follow_up_questions = []
+    separator = "---FOLLOW_UP---"
+    if separator in answer:
+        parts = answer.split(separator, 1)
+        answer = parts[0].strip()
+        for line in parts[1].strip().splitlines():
+            line = line.strip()
+            if line.startswith("- "):
+                q = line[2:].strip()
+                if q:
+                    follow_up_questions.append(q)
+        follow_up_questions = follow_up_questions[:5]  # cap at 5
+
     # Compute cost (GPT-4.1: $2/1M input, $8/1M output)
     cost = (total_input * 2.0 + total_output * 8.0) / 1_000_000
     _record_cost(cost)
@@ -391,6 +427,15 @@ def run_agent(
         f"time={elapsed_ms}ms, confidence={confidence}"
     )
 
+    # Deduplicate source_docs by pdfName
+    seen_pdfs: set = set()
+    unique_source_docs: list = []
+    for doc in source_docs:
+        key = doc.get("pdfName") or doc.get("drawingName") or ""
+        if key and key not in seen_pdfs:
+            seen_pdfs.add(key)
+            unique_source_docs.append(doc)
+
     result = AgentResult(
         answer=answer,
         steps=steps,
@@ -404,6 +449,8 @@ def run_agent(
         confidence=confidence,
         needs_escalation=needs_escalation,
         escalation_reason=escalation_reason,
+        follow_up_questions=follow_up_questions,
+        source_docs=unique_source_docs,
     )
 
     # Cache successful results
@@ -412,24 +459,46 @@ def run_agent(
     return result
 
 
-def _extract_sources(parsed: Any, sources: set) -> None:
-    """Extract source file references from tool results."""
+def _extract_sources(parsed: Any, sources: set, source_docs: list) -> None:
+    """Extract source references from tool results.
+
+    Populates *sources* (set of strings for confidence scoring) and
+    *source_docs* (list of dicts with s3BucketPath/pdfName/drawingName/
+    drawingTitle for download URL construction).
+    """
     if isinstance(parsed, list):
         for item in parsed:
             if isinstance(item, dict):
-                if "sourceFile" in item:
-                    sources.add(item["sourceFile"])
-                if "pdfName" in item:
-                    sources.add(item["pdfName"])
-                if "drawingName" in item:
-                    sources.add(item["drawingName"])
+                for key in ("drawingName", "pdfName", "sourceFile", "drawingTitle"):
+                    val = item.get(key)
+                    if val:
+                        sources.add(val)
+                # Collect structured doc info for download URLs
+                if item.get("pdfName") or item.get("s3BucketPath") or item.get("drawingName"):
+                    source_docs.append({
+                        "s3BucketPath": item.get("s3BucketPath", ""),
+                        "pdfName": item.get("pdfName", ""),
+                        "drawingName": item.get("drawingName", ""),
+                        "drawingTitle": item.get("drawingTitle", ""),
+                        "sheet_number": item.get("sheet_number", ""),
+                        "page": item.get("page") or item.get("page_count"),
+                    })
     elif isinstance(parsed, dict):
-        if "sourceFile" in parsed:
-            sources.add(parsed["sourceFile"])
-        if "pdfName" in parsed:
-            sources.add(parsed["pdfName"])
+        for key in ("drawingName", "pdfName", "sourceFile", "drawingTitle"):
+            val = parsed.get(key)
+            if val:
+                sources.add(val)
+        if parsed.get("pdfName") or parsed.get("s3BucketPath") or parsed.get("drawingName"):
+            source_docs.append({
+                "s3BucketPath": parsed.get("s3BucketPath", ""),
+                "pdfName": parsed.get("pdfName", ""),
+                "drawingName": parsed.get("drawingName", ""),
+                "drawingTitle": parsed.get("drawingTitle", ""),
+                "sheet_number": parsed.get("sheet_number", ""),
+                "page": parsed.get("page"),
+            })
         if "results" in parsed and isinstance(parsed["results"], list):
-            _extract_sources(parsed["results"], sources)
+            _extract_sources(parsed["results"], sources, source_docs)
 
 
 def _compute_confidence(

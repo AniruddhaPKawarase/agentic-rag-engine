@@ -18,6 +18,151 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# Confidence string → numeric score mapping
+CONFIDENCE_SCORE_MAP = {"high": 0.9, "medium": 0.6, "low": 0.2}
+
+
+def _base_response(**overrides: Any) -> dict:
+    """Return a complete response dict with ALL fields at safe defaults.
+
+    Every response in the system starts from this template so that the
+    frontend ALWAYS receives a consistent shape — regardless of which
+    engine answered.  New fields for future phases are included here
+    with backward-compatible defaults.
+
+    Callers pass only the fields they want to override.
+    """
+    base = {
+        # --- Core answer ---
+        "query": "",
+        "answer": "",
+        "rag_answer": None,
+        "web_answer": None,
+        # --- Retrieval metrics ---
+        "retrieval_count": 0,
+        "average_score": 0.0,
+        "confidence": "low",
+        "confidence_score": 0.0,
+        "is_clarification": False,
+        # --- Follow-up & query enhancement ---
+        "follow_up_questions": [],
+        "improved_queries": [],
+        "query_tips": [],
+        # --- Model info ---
+        "model_used": "",
+        "token_usage": None,
+        "token_tracking": None,
+        # --- Source documents (frontend display) ---
+        "s3_paths": [],
+        "s3_path_count": 0,
+        "source_documents": [],
+        "retrieved_chunks": [],
+        # --- Debug ---
+        "debug_info": None,
+        # --- Timing & context ---
+        "processing_time_ms": 0,
+        "project_id": None,
+        "session_id": None,
+        "session_stats": None,
+        # --- Search mode ---
+        "search_mode": "rag",
+        # --- Web sources ---
+        "web_sources": [],
+        "web_source_count": 0,
+        # --- Document pinning / scoping ---
+        "pin_status": None,
+        "needs_document_selection": False,
+        "available_documents": [],
+        "scoped_to": None,
+        # --- Engine metadata ---
+        "success": True,
+        "engine_used": "agentic",
+        "fallback_used": False,
+        "agentic_confidence": None,
+        "error": None,
+        # --- Agent switching (RAG <-> DocQA) ---
+        "active_agent": "rag",
+        "suggest_switch": None,
+        "selected_document": None,
+    }
+    base.update(overrides)
+    return base
+
+
+def _build_download_url(s3_path: str, pdf_name: str) -> str | None:
+    """Construct a public HTTPS download URL for a source document.
+
+    Uses the same logic as traditional engine metadata — the s3_path
+    contains ``bucket/prefix`` and the pdf_name is appended.
+
+    Format: https://{bucket}.s3.amazonaws.com/{prefix}/{pdf_name}.pdf
+    """
+    if not s3_path:
+        return None
+    # Use the traditional engine's builder if available
+    try:
+        from traditional.rag.retrieval.metadata import build_pdf_download_url
+        return build_pdf_download_url(s3_path, pdf_name or s3_path.rsplit("/", 1)[-1])
+    except ImportError:
+        pass
+    # Inline fallback: same logic
+    if not pdf_name:
+        pdf_name = s3_path.rsplit("/", 1)[-1] if "/" in s3_path else s3_path
+    bucket, _, key_prefix = s3_path.partition("/")
+    if not bucket:
+        return None
+    filename = pdf_name if pdf_name.lower().endswith(".pdf") else f"{pdf_name}.pdf"
+    return f"https://{bucket}.s3.amazonaws.com/{key_prefix}/{filename}"
+
+
+def _extract_source_documents(
+    sources: list,
+) -> tuple[list[dict], list[str]]:
+    """Convert agentic sources (str or dict) to frontend-compatible format.
+
+    Returns (source_documents, s3_paths) where each source_document has:
+    s3_path, file_name, display_title, download_url, pdf_name, drawing_name,
+    drawing_title, page — all fields the Angular frontend needs.
+
+    download_url is constructed from s3_path + pdf_name using the same
+    pattern as the traditional engine's metadata module.
+    """
+    source_documents: list[dict] = []
+    s3_paths: list[str] = []
+
+    for src in sources or []:
+        if isinstance(src, dict):
+            s3_path = src.get("s3_path", src.get("s3BucketPath", src.get("sourceFile", "")))
+            pdf_name = src.get("pdfName", src.get("pdf_name", ""))
+            download_url = src.get("download_url") or _build_download_url(s3_path, pdf_name)
+            source_documents.append({
+                "s3_path": s3_path,
+                "file_name": src.get("name", src.get("sourceFile", pdf_name or "")),
+                "display_title": src.get("sheet_number", src.get("name", src.get("drawingName", ""))),
+                "download_url": download_url,
+                "pdf_name": pdf_name,
+                "drawing_name": src.get("drawingName", src.get("drawing_name", "")),
+                "drawing_title": src.get("drawingTitle", src.get("drawing_title", "")),
+                "page": src.get("page"),
+            })
+            if s3_path:
+                s3_paths.append(s3_path)
+        elif isinstance(src, str):
+            download_url = _build_download_url(src, src)
+            source_documents.append({
+                "s3_path": src,
+                "file_name": src,
+                "display_title": src,
+                "download_url": download_url,
+                "pdf_name": src,
+                "drawing_name": "",
+                "drawing_title": "",
+                "page": None,
+            })
+            s3_paths.append(src)
+
+    return source_documents, s3_paths
+
 
 # ---------------------------------------------------------------------------
 # Pure fallback decision function
@@ -89,8 +234,16 @@ class AgenticEngine:
         project_id: int,
         set_id: Optional[int] = None,
         conversation_history: Optional[list] = None,
+        scope: Optional[dict] = None,
     ) -> Any:
-        """Run the agentic RAG pipeline in a thread (blocking call)."""
+        """Run the agentic RAG pipeline in a thread (blocking call).
+
+        Parameters
+        ----------
+        scope : dict or None
+            Document scope filter. When set, injected into every tool call
+            to restrict results to a specific drawingTitle/drawingName.
+        """
         self.ensure_initialized()
         from agentic.core.agent import run_agent  # type: ignore[import-untyped]
 
@@ -100,6 +253,7 @@ class AgenticEngine:
             project_id=project_id,
             set_id=set_id,
             conversation_history=conversation_history,
+            scope=scope,
         )
         return result
 
@@ -197,6 +351,10 @@ class Orchestrator:
         self.fallback_timeout = fallback_timeout
         self.agentic = AgenticEngine()
         self.traditional = TraditionalEngine()
+        # Per-request context (set at start of query(), used by _build_response)
+        self._last_query: str = ""
+        self._last_project_id: Optional[int] = None
+        self._last_session_id: Optional[str] = None
 
     async def query(
         self,
@@ -207,27 +365,38 @@ class Orchestrator:
         set_id: Optional[int] = None,
         conversation_history: Optional[list] = None,
         search_mode: Optional[str] = None,
+        docqa_document: Optional[dict] = None,
         **kwargs: Any,
     ) -> dict:
         """Route a query through the appropriate engine(s).
 
-        Parameters
-        ----------
-        search_mode : str or None
-            ``"rag"``  — project data only (default, AgenticRAG MongoDB tools)
-            ``"web"``  — web search only (OpenAI web_search tool)
-            ``"hybrid"`` — BOTH in parallel: rag_answer from project data +
-                           web_answer from web search, returned as two fields.
-
         Flow
         ----
-        1. If ``search_mode="web"`` — run web search only.
-        2. If ``search_mode="hybrid"`` — run agentic + web in parallel.
-        3. If ``engine="traditional"`` — skip agentic, go straight to FAISS.
-        4. Otherwise try agentic first, fallback to traditional if needed.
+        1. If ``search_mode="docqa"`` — route to Document QA agent.
+        2. If ``search_mode="web"`` — run web search only.
+        3. If ``search_mode="hybrid"`` — run agentic + web in parallel.
+        4. Check session scope — if active, inject scope filters into agentic.
+        5. Try agentic first.
+        6. If agentic fails → document discovery (list available drawing titles)
+           instead of blind FAISS fallback.
         """
         start = time.monotonic()
         search_mode = search_mode or "rag"
+
+        # Store per-request context for _build_response
+        self._last_query = query
+        self._last_project_id = project_id
+        self._last_session_id = session_id
+
+        # --- DocQA mode: route to Document QA agent ---
+        if search_mode == "docqa":
+            return await self._run_docqa(
+                query=query,
+                project_id=project_id,
+                session_id=session_id,
+                docqa_document=docqa_document,
+                start=start,
+            )
 
         # --- Web-only mode ---
         if search_mode == "web":
@@ -239,13 +408,29 @@ class Orchestrator:
                 query, project_id, set_id, conversation_history, start,
             )
 
-        # --- Direct traditional request ---
+        # --- Direct traditional request (backward compat, not used in scoped mode) ---
         if engine == "traditional":
             return await self._run_traditional(
                 query, project_id, session_id, start, **kwargs,
             )
 
-        # --- Try agentic ---
+        # --- Resolve session scope ---
+        scope = None
+        if session_id:
+            try:
+                from shared.session.manager import get_document_scope
+                scope_state = get_document_scope(session_id)
+                if scope_state.get("is_active"):
+                    scope = scope_state
+                    logger.info(
+                        "Query scoped to: %s (%s)",
+                        scope.get("drawing_title") or scope.get("section_title"),
+                        scope.get("document_type"),
+                    )
+            except ImportError:
+                pass
+
+        # --- Try agentic (with scope if active) ---
         agentic_result = None
         agentic_error: Optional[str] = None
         try:
@@ -254,6 +439,7 @@ class Orchestrator:
                 project_id=project_id,
                 set_id=set_id,
                 conversation_history=conversation_history,
+                scope=scope,
             )
         except Exception as exc:
             agentic_error = str(exc)
@@ -261,53 +447,457 @@ class Orchestrator:
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
 
-        # --- If forced agentic or fallback disabled, return as-is ---
-        if engine == "agentic" or not self.fallback_enabled:
-            return self._build_response(
-                result=agentic_result,
-                engine="agentic",
-                elapsed_ms=elapsed_ms,
-                fallback_used=False,
-                error=agentic_error,
-            )
+        # --- Touch scope timer if active ---
+        if scope and session_id:
+            try:
+                from shared.session.manager import get_meta
+                get_meta(session_id).scope.touch()
+            except ImportError:
+                pass
 
-        # --- Evaluate and possibly fallback ---
+        # --- Session management for agentic queries ---
+        # The traditional engine handles sessions internally, but the agentic
+        # engine does not. We create/update sessions here for agentic results.
+        active_session_id = session_id
+        session_stats = None
+        try:
+            from traditional.memory_manager import get_memory_manager, estimate_tokens  # type: ignore
+            mm = get_memory_manager()
+            if not active_session_id:
+                active_session_id = mm.create_session(
+                    user_query=query,
+                    project_id=project_id,
+                )
+            # Add user message
+            mm.add_to_session(
+                session_id=active_session_id,
+                role="user",
+                content=query,
+                tokens=estimate_tokens(query),
+                metadata={"search_mode": "agentic", "project_id": project_id},
+            )
+            # Add assistant message if we have an answer
+            answer_text = getattr(agentic_result, "answer", "") if agentic_result else ""
+            if answer_text:
+                mm.add_to_session(
+                    session_id=active_session_id,
+                    role="assistant",
+                    content=answer_text,
+                    tokens=estimate_tokens(answer_text),
+                    metadata={
+                        "engine": "agentic",
+                        "confidence": getattr(agentic_result, "confidence", ""),
+                        "cost_usd": getattr(agentic_result, "total_cost_usd", 0),
+                    },
+                )
+            session_stats = mm.get_session_stats(active_session_id)
+        except (ImportError, Exception) as exc:
+            logger.debug("Session management for agentic: %s", exc)
+
+        # Update per-request context with resolved session_id
+        self._last_session_id = active_session_id
+
+        # --- Record engine usage ---
+        if active_session_id:
+            try:
+                from shared.session.manager import record_engine_use
+                cost = getattr(agentic_result, "total_cost_usd", 0.0) if agentic_result else 0.0
+                record_engine_use(active_session_id, "agentic", cost)
+            except ImportError:
+                pass
+
+        # --- Success: agentic answered well ---
         if not _should_fallback(agentic_result):
-            return self._build_response(
+            resp = self._build_response(
                 result=agentic_result,
                 engine="agentic",
                 elapsed_ms=elapsed_ms,
                 fallback_used=False,
                 error=None,
             )
+            resp["session_id"] = active_session_id
+            resp["session_stats"] = session_stats
+            if scope:
+                resp["scoped_to"] = scope.get("drawing_title") or scope.get("section_title")
+            return resp
 
-        # --- Fallback to traditional ---
+        # --- Agentic failed: document discovery instead of FAISS fallback ---
         agentic_confidence = getattr(agentic_result, "confidence", None)
         logger.info(
-            "Falling back to traditional RAG (agentic confidence=%s)",
+            "Agentic insufficient (confidence=%s) — running document discovery",
             agentic_confidence,
         )
-        try:
-            trad_response = await asyncio.wait_for(
-                self._run_traditional(
-                    query, project_id, session_id, start, **kwargs,
-                ),
-                timeout=self.fallback_timeout,
-            )
-            trad_response["fallback_used"] = True
-            trad_response["agentic_confidence"] = agentic_confidence
-            return trad_response
-        except Exception as exc:
-            logger.warning("Traditional fallback also failed: %s", exc)
-            # Return whatever agentic had
-            elapsed_ms = int((time.monotonic() - start) * 1000)
-            return self._build_response(
+
+        # If already scoped and failed → report "doc doesn't have this info"
+        if scope:
+            scoped_name = scope.get("drawing_title") or scope.get("section_title")
+            resp = self._build_response(
                 result=agentic_result,
                 engine="agentic",
                 elapsed_ms=elapsed_ms,
                 fallback_used=False,
-                error=f"Fallback failed: {exc}",
+                error=None,
             )
+            resp["answer"] = (
+                f"The document '{scoped_name}' does not contain information "
+                f"about this topic. You can try a different document or "
+                f"return to full project scope to search all documents."
+            )
+            resp["scoped_to"] = scoped_name
+            resp["needs_document_selection"] = True
+            # Discover other documents for suggestions
+            available = await self._discover_documents(project_id, set_id)
+            resp["available_documents"] = available
+            resp["session_id"] = active_session_id
+            resp["session_stats"] = session_stats
+            return resp
+
+        # Not scoped: run document discovery for the full project
+        resp = self._build_response(
+            result=agentic_result,
+            engine="agentic",
+            elapsed_ms=elapsed_ms,
+            fallback_used=False,
+            error=agentic_error,
+        )
+        if not resp.get("answer") or len(resp.get("answer", "")) < 20:
+            resp["answer"] = (
+                "I couldn't find specific information in a broad search. "
+                "Your project has the following document groups — try "
+                "selecting one for a focused search."
+            )
+        resp["needs_document_selection"] = True
+        resp["agentic_confidence"] = agentic_confidence
+        available = await self._discover_documents(project_id, set_id)
+        resp["available_documents"] = available
+
+        # Generate improved queries and tips (query enhancement)
+        try:
+            from gateway.query_enhancer import generate_query_enhancement
+            enhancement = generate_query_enhancement(
+                original_query=query,
+                available_documents=available,
+                project_id=project_id,
+            )
+            resp["improved_queries"] = enhancement.get("improved_queries", [])
+            resp["query_tips"] = enhancement.get("query_tips", [])
+        except Exception as exc:
+            logger.warning("Query enhancement failed: %s", exc)
+
+        resp["session_id"] = active_session_id
+        resp["session_stats"] = session_stats
+        return resp
+
+    # ------------------------------------------------------------------
+    # Document discovery
+    # ------------------------------------------------------------------
+
+    async def _discover_documents(
+        self,
+        project_id: int,
+        set_id: Optional[int] = None,
+    ) -> list[dict]:
+        """Fetch unique drawing titles + spec titles for document discovery.
+
+        Uses the title cache (1hr TTL) to avoid re-aggregating on every query.
+        Returns a merged list of drawings and specifications.
+        """
+        try:
+            from gateway.title_cache import get_cached_titles, set_cached_titles
+
+            # Check cache first
+            cached = get_cached_titles(project_id)
+            if cached:
+                return self._merge_available_documents(
+                    cached["drawings"], cached["specifications"],
+                )
+
+            # Cache miss — fetch from MongoDB
+            drawings = await asyncio.to_thread(
+                self._fetch_drawing_titles, project_id, set_id,
+            )
+            specifications = await asyncio.to_thread(
+                self._fetch_spec_titles, project_id,
+            )
+
+            # Store in cache
+            set_cached_titles(project_id, drawings, specifications)
+
+            return self._merge_available_documents(drawings, specifications)
+
+        except Exception as exc:
+            logger.error("Document discovery failed: %s", exc)
+            return []
+
+    @staticmethod
+    def _fetch_drawing_titles(project_id: int, set_id: Optional[int] = None) -> list[dict]:
+        """Fetch unique drawing titles from MongoDB."""
+        try:
+            from agentic.tools.drawing_tools import list_unique_drawing_titles  # type: ignore
+            return list_unique_drawing_titles(project_id, set_id)
+        except Exception as exc:
+            logger.error("Failed to fetch drawing titles: %s", exc)
+            return []
+
+    @staticmethod
+    def _fetch_spec_titles(project_id: int) -> list[dict]:
+        """Fetch unique spec titles from MongoDB."""
+        try:
+            from agentic.tools.specification_tools import list_unique_spec_titles  # type: ignore
+            return list_unique_spec_titles(project_id)
+        except Exception as exc:
+            logger.error("Failed to fetch spec titles: %s", exc)
+            return []
+
+    @staticmethod
+    def _merge_available_documents(
+        drawings: list[dict],
+        specifications: list[dict],
+    ) -> list[dict]:
+        """Merge drawing and spec title lists into a unified available_documents list.
+
+        Groups by document type, includes trade info for drawings.
+        """
+        result: list[dict] = []
+
+        for d in drawings:
+            result.append({
+                "type": "drawing",
+                "drawing_title": d.get("drawingTitle", ""),
+                "drawing_name": d.get("drawingName", ""),
+                "trade": d.get("trade", ""),
+                "pdf_name": d.get("pdfName", ""),
+                "fragment_count": d.get("fragment_count", 0),
+            })
+
+        for s in specifications:
+            result.append({
+                "type": "specification",
+                "section_title": s.get("sectionTitle", ""),
+                "pdf_name": s.get("pdfName", ""),
+                "specification_number": s.get("specificationNumber", ""),
+                "fragment_count": s.get("fragment_count", 0),
+            })
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Document QA Agent bridge
+    # ------------------------------------------------------------------
+
+    async def _run_docqa(
+        self,
+        query: str,
+        project_id: int,
+        session_id: Optional[str],
+        docqa_document: Optional[dict],
+        start: float,
+    ) -> dict:
+        """Route query to the Document QA agent.
+
+        Two modes:
+        1. First call with docqa_document → download PDF from S3, upload to DocQA
+        2. Follow-up call without docqa_document → forward query to existing DocQA session
+        """
+        from gateway.docqa_client import upload_and_query, query_document, check_health
+        from gateway.intent_classifier import classify_intent
+
+        elapsed_ms = lambda: int((time.monotonic() - start) * 1000)
+
+        # Check DocQA health
+        if not await check_health():
+            return _base_response(
+                query=query,
+                processing_time_ms=elapsed_ms(),
+                success=False,
+                error="Document QA agent is not running. Please try again later.",
+                search_mode="docqa",
+                engine_used="docqa",
+            )
+
+        # Intent classification for hybrid switching
+        intent = classify_intent(query, active_agent="docqa")
+        if intent == "exit_docqa":
+            return _base_response(
+                query=query,
+                answer="Switched back to project search mode. Ask any question about your project.",
+                processing_time_ms=elapsed_ms(),
+                search_mode="rag",
+                engine_used="rag",
+                active_agent="rag",
+            )
+        if intent == "suggest_switch_to_rag":
+            return _base_response(
+                query=query,
+                answer=(
+                    "This question seems to be about the broader project, not just the "
+                    "selected document. Would you like to switch back to project search? "
+                    "Click 'Back to Project Search' or rephrase your question for this document."
+                ),
+                processing_time_ms=elapsed_ms(),
+                search_mode="docqa",
+                engine_used="docqa",
+                suggest_switch="rag",
+            )
+
+        # Resolve DocQA session from RAG session metadata
+        docqa_session_id = None
+        if session_id:
+            try:
+                from shared.session.manager import get_meta
+                meta = get_meta(session_id)
+                docqa_session_id = getattr(meta, "docqa_session_id", None)
+            except (ImportError, Exception):
+                pass
+
+        # Mode 1: New document upload
+        if docqa_document:
+            s3_path = docqa_document.get("s3_path", "")
+            file_name = docqa_document.get("file_name") or s3_path.rsplit("/", 1)[-1]
+            download_url = docqa_document.get("download_url")
+
+            if not file_name.lower().endswith(".pdf"):
+                file_name = f"{file_name}.pdf"
+
+            # Download the PDF
+            tmp_path = None
+            try:
+                from shared.s3_client import download_from_s3, download_from_url
+                tmp_path = download_from_s3(s3_path)
+                if tmp_path is None and download_url:
+                    tmp_path = download_from_url(download_url)
+            except ImportError:
+                logger.warning("s3_client not available, trying download_url")
+                if download_url:
+                    try:
+                        from shared.s3_client import download_from_url
+                        tmp_path = download_from_url(download_url)
+                    except ImportError:
+                        pass
+
+            if tmp_path is None:
+                return _base_response(
+                    query=query,
+                    answer=(
+                        f"Could not download the document '{file_name}'. "
+                        "S3 access may not be configured. Please check AWS credentials."
+                    ),
+                    processing_time_ms=elapsed_ms(),
+                    success=False,
+                    error="S3 download failed",
+                    search_mode="docqa",
+                    engine_used="docqa",
+                )
+
+            # Upload to DocQA and ask the question
+            try:
+                result = await upload_and_query(
+                    file_path=tmp_path,
+                    file_name=file_name,
+                    query=query,
+                    session_id=docqa_session_id,
+                )
+            finally:
+                # Clean up temp file
+                import os
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
+            if result.get("error"):
+                return _base_response(
+                    query=query,
+                    processing_time_ms=elapsed_ms(),
+                    success=False,
+                    error=result["error"],
+                    search_mode="docqa",
+                    engine_used="docqa",
+                )
+
+            # Store DocQA session ID in RAG session metadata
+            new_docqa_session = result.get("session_id")
+            if new_docqa_session and session_id:
+                try:
+                    from shared.session.manager import get_meta
+                    meta = get_meta(session_id)
+                    meta.docqa_session_id = new_docqa_session
+                except (ImportError, Exception):
+                    pass
+
+            return self._format_docqa_response(result, query, elapsed_ms(), file_name)
+
+        # Mode 2: Follow-up query on existing DocQA session
+        if docqa_session_id:
+            result = await query_document(docqa_session_id, query)
+            if result.get("error"):
+                return _base_response(
+                    query=query,
+                    processing_time_ms=elapsed_ms(),
+                    success=False,
+                    error=result["error"],
+                    search_mode="docqa",
+                    engine_used="docqa",
+                )
+            return self._format_docqa_response(result, query, elapsed_ms())
+
+        # No document selected and no existing DocQA session
+        return _base_response(
+            query=query,
+            answer=(
+                "No document is currently selected for deep-dive analysis. "
+                "Please select a reference document from the source list first, "
+                "or switch back to project search mode."
+            ),
+            processing_time_ms=elapsed_ms(),
+            search_mode="docqa",
+            engine_used="docqa",
+            needs_document_selection=True,
+        )
+
+    def _format_docqa_response(
+        self,
+        docqa_result: dict,
+        query: str,
+        elapsed_ms: int,
+        file_name: str = "",
+    ) -> dict:
+        """Convert DocQA agent response to the unified RAG response format."""
+        sources = docqa_result.get("sources", [])
+        source_documents = [
+            {
+                "s3_path": s.get("file_name", ""),
+                "file_name": s.get("file_name", ""),
+                "display_title": s.get("file_name", ""),
+                "download_url": None,
+                "page": s.get("page_number"),
+                "drawing_name": "",
+                "drawing_title": "",
+                "text_preview": s.get("text_preview", "")[:200],
+                "relevance_score": s.get("score", 0),
+            }
+            for s in sources
+        ]
+
+        return _base_response(
+            query=query,
+            answer=docqa_result.get("answer", ""),
+            confidence="high" if docqa_result.get("groundedness_score", 0) > 0.5 else "medium",
+            confidence_score=docqa_result.get("groundedness_score", 0.0),
+            follow_up_questions=docqa_result.get("follow_up_questions", []),
+            source_documents=source_documents,
+            s3_paths=[s.get("file_name", "") for s in sources],
+            s3_path_count=len(sources),
+            model_used=docqa_result.get("model_used", "gpt-4o"),
+            token_usage=docqa_result.get("token_usage"),
+            processing_time_ms=elapsed_ms,
+            search_mode="docqa",
+            engine_used="docqa",
+            session_id=docqa_result.get("session_id", ""),
+            is_clarification=docqa_result.get("needs_clarification", False),
+            active_agent="docqa",
+            selected_document=file_name,
+        )
 
     # ------------------------------------------------------------------
     # Web search (shared by web-only and hybrid modes)
@@ -319,45 +909,25 @@ class Orchestrator:
             from traditional.services.web_search import web_search
             result = await asyncio.to_thread(web_search, query)
             elapsed_ms = int((time.monotonic() - start) * 1000)
-            return {
-                "query": query,
-                "answer": result.get("answer", ""),
-                "rag_answer": None,
-                "web_answer": result.get("answer", ""),
-                "retrieval_count": 0,
-                "average_score": 0.0,
-                "confidence_score": 0.8,
-                "is_clarification": False,
-                "follow_up_questions": [],
-                "model_used": "gpt-4.1",
-                "token_usage": None,
-                "token_tracking": None,
-                "s3_paths": [],
-                "s3_path_count": 0,
-                "source_documents": [],
-                "retrieved_chunks": [],
-                "debug_info": None,
-                "processing_time_ms": elapsed_ms,
-                "project_id": None,
-                "session_id": None,
-                "session_stats": None,
-                "search_mode": "web",
-                "web_sources": result.get("sources", []),
-                "web_source_count": len(result.get("sources", [])),
-                "pin_status": None,
-                "success": True,
-                "engine_used": "agentic",
-                "fallback_used": False,
-                "agentic_confidence": None,
-                "error": None,
-            }
+            web_sources = result.get("sources", [])
+            return _base_response(
+                query=query,
+                answer=result.get("answer", ""),
+                web_answer=result.get("answer", ""),
+                confidence_score=0.8,
+                model_used="gpt-4.1",
+                processing_time_ms=elapsed_ms,
+                search_mode="web",
+                web_sources=web_sources,
+                web_source_count=len(web_sources),
+            )
         except Exception as exc:
             elapsed_ms = int((time.monotonic() - start) * 1000)
             logger.error("Web search failed: %s", exc)
-            return self._build_response(
-                result=None, engine="agentic",
-                elapsed_ms=elapsed_ms, fallback_used=False,
-                error=f"Web search failed: {exc}",
+            return _base_response(
+                processing_time_ms=elapsed_ms,
+                success=False,
+                error="Web search failed. Please try again.",
             )
 
     async def _run_hybrid(
@@ -403,7 +973,6 @@ class Orchestrator:
         sources = getattr(agentic_result, "sources", []) if agentic_result else []
         web_sources = web_result.get("sources", []) if web_result else []
         confidence = getattr(agentic_result, "confidence", "low") if agentic_result else "low"
-        conf_map = {"high": 0.9, "medium": 0.6, "low": 0.2}
 
         # Build combined answer
         combined = ""
@@ -416,63 +985,33 @@ class Orchestrator:
         if not combined:
             combined = "No results from either project data or web search."
 
-        # Build source_documents from agentic
-        source_documents = []
-        s3_paths = []
-        for src in (sources or []):
-            if isinstance(src, dict):
-                s3_path = src.get("s3_path", src.get("sourceFile", ""))
-                source_documents.append({
-                    "s3_path": s3_path,
-                    "file_name": src.get("name", src.get("sourceFile", "")),
-                    "display_title": src.get("sheet_number", src.get("name", "")),
-                    "download_url": None,
-                })
-                if s3_path:
-                    s3_paths.append(s3_path)
-            elif isinstance(src, str):
-                source_documents.append({
-                    "s3_path": src, "file_name": src,
-                    "display_title": src, "download_url": None,
-                })
-                s3_paths.append(src)
+        source_documents, s3_paths = _extract_source_documents(sources)
 
-        return {
-            "query": query,
-            "answer": combined,
-            "rag_answer": rag_answer,
-            "web_answer": web_answer,
-            "retrieval_count": len(sources),
-            "average_score": conf_map.get(confidence, 0.5),
-            "confidence_score": conf_map.get(confidence, 0.5),
-            "is_clarification": False,
-            "follow_up_questions": [],
-            "model_used": getattr(agentic_result, "model", "gpt-4.1") if agentic_result else "gpt-4.1",
-            "token_usage": None,
-            "token_tracking": None,
-            "s3_paths": s3_paths,
-            "s3_path_count": len(s3_paths),
-            "source_documents": source_documents,
-            "retrieved_chunks": [],
-            "debug_info": {
+        return _base_response(
+            query=query,
+            answer=combined,
+            rag_answer=rag_answer,
+            web_answer=web_answer,
+            retrieval_count=len(sources),
+            confidence=confidence,
+            average_score=CONFIDENCE_SCORE_MAP.get(confidence, 0.5),
+            confidence_score=CONFIDENCE_SCORE_MAP.get(confidence, 0.5),
+            model_used=getattr(agentic_result, "model", "gpt-4.1") if agentic_result else "gpt-4.1",
+            s3_paths=s3_paths,
+            s3_path_count=len(s3_paths),
+            source_documents=source_documents,
+            debug_info={
                 "agentic_steps": getattr(agentic_result, "total_steps", 0) if agentic_result else 0,
                 "agentic_cost_usd": getattr(agentic_result, "cost_usd", 0.0) if agentic_result else 0.0,
                 "web_sources_count": len(web_sources),
             },
-            "processing_time_ms": elapsed_ms,
-            "project_id": project_id,
-            "session_id": None,
-            "session_stats": None,
-            "search_mode": "hybrid",
-            "web_sources": web_sources,
-            "web_source_count": len(web_sources),
-            "pin_status": None,
-            "success": True,
-            "engine_used": "agentic",
-            "fallback_used": False,
-            "agentic_confidence": confidence,
-            "error": None,
-        }
+            processing_time_ms=elapsed_ms,
+            project_id=project_id,
+            search_mode="hybrid",
+            web_sources=web_sources,
+            web_source_count=len(web_sources),
+            agentic_confidence=confidence,
+        )
 
     @staticmethod
     def _sync_web_search(query: str) -> dict:
@@ -516,141 +1055,102 @@ class Orchestrator:
         fallback_used: bool,
         error: Optional[str],
     ) -> dict:
-        """Convert an engine result to a response dict matching old RAG QueryResponse schema.
+        """Convert an engine result to a response dict matching the QueryResponse schema.
 
-        Traditional engine returns a dict (or Pydantic model) — pass through ALL fields,
-        only inject engine_used/fallback_used/agentic_confidence.
+        Handles three result types:
+        1. None → empty response with error
+        2. dict / Pydantic model (traditional engine) → pass through ALL fields, inject engine metadata
+        3. dataclass (agentic engine) → map to the full response schema
 
-        Agentic engine returns a dataclass — map to the old QueryResponse schema so the
-        frontend gets the same shape regardless of which engine answered.
+        Every path returns a dict starting from _base_response() so ALL fields
+        (including source_documents, s3_paths, pdf_name, drawing_name, etc.)
+        are always present for the Angular frontend.
         """
+        # --- None result (engine error or timeout) ---
         if result is None:
-            return {
-                "query": "",
-                "answer": "",
-                "rag_answer": None,
-                "web_answer": None,
-                "retrieval_count": 0,
-                "average_score": 0.0,
-                "confidence_score": 0.0,
-                "is_clarification": False,
-                "follow_up_questions": [],
-                "model_used": "",
-                "token_usage": None,
-                "token_tracking": None,
-                "s3_paths": [],
-                "s3_path_count": 0,
-                "source_documents": [],
-                "retrieved_chunks": [],
-                "debug_info": None,
-                "processing_time_ms": elapsed_ms,
-                "project_id": None,
-                "session_id": None,
-                "session_stats": None,
-                "search_mode": "rag",
-                "web_sources": [],
-                "web_source_count": 0,
-                "pin_status": None,
-                "success": error is None,
-                "engine_used": engine,
-                "fallback_used": fallback_used,
-                "agentic_confidence": None,
-                "error": error,
-            }
+            return _base_response(
+                query=self._last_query or "",
+                processing_time_ms=elapsed_ms,
+                project_id=self._last_project_id,
+                session_id=self._last_session_id,
+                success=error is None,
+                engine_used=engine,
+                fallback_used=fallback_used,
+                error=error,
+            )
 
-        # Handle dict results (traditional engine) — pass through ALL fields
+        # --- Dict results (traditional engine) — pass through ALL original fields ---
         if isinstance(result, dict):
-            resp = dict(result)  # shallow copy, preserve all original fields
+            resp = _base_response()  # start from full template
+            resp.update(result)      # overlay all traditional fields (preserves everything)
             resp["engine_used"] = engine
             resp["fallback_used"] = fallback_used
             resp["agentic_confidence"] = resp.get("agentic_confidence")
-            if "processing_time_ms" not in resp:
+            if "processing_time_ms" not in result:
                 resp["processing_time_ms"] = elapsed_ms
             if error:
                 resp["error"] = error
             return resp
 
-        # Handle Pydantic model results (traditional engine returning model)
+        # --- Pydantic model results (traditional engine returning model) ---
         if hasattr(result, "model_dump"):
-            resp = result.model_dump()
+            resp = _base_response()
+            resp.update(result.model_dump())
             resp["engine_used"] = engine
             resp["fallback_used"] = fallback_used
             resp["agentic_confidence"] = None
-            if "processing_time_ms" not in resp:
+            if "processing_time_ms" not in result.model_dump():
                 resp["processing_time_ms"] = elapsed_ms
             return resp
 
-        # Handle dataclass / object results (agentic engine) — map to old schema
+        # --- Dataclass / object results (agentic engine) → map to full schema ---
         answer = getattr(result, "answer", str(result))
         sources = getattr(result, "sources", []) or []
         confidence = getattr(result, "confidence", "medium")
-        cost = getattr(result, "cost_usd", 0.0)
+        cost = getattr(result, "total_cost_usd", 0.0)
         steps = getattr(result, "total_steps", 0)
         model = getattr(result, "model", "")
+        follow_ups = getattr(result, "follow_up_questions", []) or []
+        input_tokens = getattr(result, "total_input_tokens", 0)
+        output_tokens = getattr(result, "total_output_tokens", 0)
 
-        # Map confidence string to numeric score
-        conf_map = {"high": 0.9, "medium": 0.6, "low": 0.2}
-        confidence_score = conf_map.get(confidence, 0.5)
+        # Use structured source_docs (with s3BucketPath/pdfName) when available
+        # for proper download URL construction; fall back to plain string sources
+        source_docs = getattr(result, "source_docs", []) or []
+        raw_sources = source_docs if source_docs else sources
 
-        # Build source_documents from agentic sources
-        source_documents = []
-        s3_paths = []
-        for src in sources:
-            if isinstance(src, dict):
-                s3_path = src.get("s3_path", src.get("sourceFile", ""))
-                source_documents.append({
-                    "s3_path": s3_path,
-                    "file_name": src.get("name", src.get("sourceFile", "")),
-                    "display_title": src.get("sheet_number", src.get("name", "")),
-                    "download_url": None,
-                })
-                if s3_path:
-                    s3_paths.append(s3_path)
-            elif isinstance(src, str):
-                source_documents.append({
-                    "s3_path": src,
-                    "file_name": src,
-                    "display_title": src,
-                    "download_url": None,
-                })
-                s3_paths.append(src)
+        confidence_score = CONFIDENCE_SCORE_MAP.get(confidence, 0.5)
+        source_documents, s3_paths = _extract_source_documents(raw_sources)
 
-        return {
-            "query": "",
-            "answer": answer,
-            "rag_answer": answer,
-            "web_answer": None,
-            "retrieval_count": len(sources),
-            "average_score": confidence_score,
-            "confidence_score": confidence_score,
-            "is_clarification": confidence == "low",
-            "follow_up_questions": [],
-            "model_used": model,
-            "token_usage": {
-                "total_tokens": 0,
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
+        return _base_response(
+            query=self._last_query or "",
+            answer=answer,
+            rag_answer=answer,
+            retrieval_count=len(sources),
+            confidence=confidence,
+            average_score=confidence_score,
+            confidence_score=confidence_score,
+            is_clarification=confidence == "low",
+            follow_up_questions=follow_ups,
+            model_used=model,
+            token_usage={
+                "total_tokens": input_tokens + output_tokens,
+                "prompt_tokens": input_tokens,
+                "completion_tokens": output_tokens,
             },
-            "token_tracking": None,
-            "s3_paths": s3_paths,
-            "s3_path_count": len(s3_paths),
-            "source_documents": source_documents,
-            "retrieved_chunks": [],
-            "debug_info": {
+            s3_paths=s3_paths,
+            s3_path_count=len(s3_paths),
+            source_documents=source_documents,
+            debug_info={
                 "agentic_steps": steps,
                 "agentic_cost_usd": cost,
             },
-            "processing_time_ms": elapsed_ms,
-            "project_id": None,
-            "session_id": None,
-            "session_stats": None,
-            "search_mode": "agentic",
-            "web_sources": [],
-            "web_source_count": 0,
-            "pin_status": None,
-            "success": True,
-            "engine_used": engine,
-            "fallback_used": fallback_used,
-            "agentic_confidence": confidence,
-            "error": error,
-        }
+            processing_time_ms=elapsed_ms,
+            project_id=self._last_project_id,
+            session_id=self._last_session_id,
+            search_mode="agentic",
+            engine_used=engine,
+            fallback_used=fallback_used,
+            agentic_confidence=confidence,
+            error=error,
+        )

@@ -21,13 +21,22 @@ logger = logging.getLogger("agentic_rag.tools.drawing")
 COLLECTION = "drawing"
 
 
-def list_project_drawings(project_id: int, set_id: int = None) -> List[Dict]:
+def list_project_drawings(
+    project_id: int,
+    set_id: int = None,
+    drawing_title: str = None,
+    drawing_name: str = None,
+) -> List[Dict]:
     """List unique drawings for a project with metadata."""
     project_id = validate_project_id(project_id)
     coll = get_collection(COLLECTION)
     match = {"projectId": project_id}
     if set_id:
         match["setId"] = set_id
+    if drawing_title:
+        match["drawingTitle"] = re.compile(re.escape(drawing_title), re.IGNORECASE)
+    if drawing_name:
+        match["drawingName"] = re.compile(re.escape(drawing_name), re.IGNORECASE)
 
     pipeline = [
         {"$match": match},
@@ -80,7 +89,8 @@ def get_drawing_text(
     fragments = list(coll.find(
         query,
         {"text": 1, "x": 1, "y": 1, "page": 1,
-         "drawingTitle": 1, "drawingName": 1, "trade": 1, "_id": 0},
+         "drawingTitle": 1, "drawingName": 1, "trade": 1,
+         "pdfName": 1, "s3BucketPath": 1, "_id": 0},
     ).sort([("page", 1), ("y", 1), ("x", 1)]).limit(5000))
 
     if not fragments:
@@ -96,6 +106,8 @@ def get_drawing_text(
         "drawingTitle": title,
         "drawingName": name,
         "trade": trade,
+        "pdfName": fragments[0].get("pdfName", ""),
+        "s3BucketPath": fragments[0].get("s3BucketPath", ""),
         "fragment_count": len(fragments),
         "reconstructed_text": text[:30000],
         "text_length": len(text),
@@ -106,6 +118,8 @@ def search_drawing_text(
     project_id: int,
     search_text: str,
     limit: int = 10,
+    drawing_title: str = None,
+    drawing_name: str = None,
 ) -> List[Dict]:
     """Search drawing fragments for specific text content."""
     project_id = validate_project_id(project_id)
@@ -114,13 +128,21 @@ def search_drawing_text(
     coll = get_collection(COLLECTION)
     pattern = re.compile(re.escape(search_text), re.IGNORECASE)
 
+    match_stage = {"projectId": project_id, "text": pattern}
+    if drawing_title:
+        match_stage["drawingTitle"] = re.compile(re.escape(drawing_title), re.IGNORECASE)
+    if drawing_name:
+        match_stage["drawingName"] = re.compile(re.escape(drawing_name), re.IGNORECASE)
+
     pipeline = [
-        {"$match": {"projectId": project_id, "text": pattern}},
+        {"$match": match_stage},
         {"$group": {
             "_id": "$drawingId",
             "drawingTitle": {"$first": "$drawingTitle"},
             "drawingName": {"$first": "$drawingName"},
             "setTrade": {"$first": {"$ifNull": ["$setTrade", "$trade"]}},
+            "pdfName": {"$first": "$pdfName"},
+            "s3BucketPath": {"$first": "$s3BucketPath"},
             "matching_texts": {"$push": "$text"},
             "match_count": {"$sum": 1},
         }},
@@ -137,6 +159,8 @@ def search_drawing_text(
             "drawingTitle": doc.get("drawingTitle", ""),
             "drawingName": doc.get("drawingName", ""),
             "setTrade": doc.get("setTrade", ""),
+            "pdfName": doc.get("pdfName", ""),
+            "s3BucketPath": doc.get("s3BucketPath", ""),
             "match_count": doc.get("match_count", 0),
             "sample_matches": previews,
         })
@@ -149,6 +173,8 @@ def search_drawings_by_trade(
     project_id: int,
     trade: str,
     limit: int = 20,
+    drawing_title: str = None,
+    drawing_name: str = None,
 ) -> List[Dict]:
     """Search drawings by trade name (e.g., 'Electrical', 'Mechanical')."""
     project_id = validate_project_id(project_id)
@@ -156,20 +182,28 @@ def search_drawings_by_trade(
     coll = get_collection(COLLECTION)
     trade_regex = re.compile(re.escape(trade), re.IGNORECASE)
 
+    match_stage = {
+        "projectId": project_id,
+        "$or": [
+            {"setTrade": trade_regex},
+            {"trade": trade_regex},
+            {"trades.0": trade_regex},
+        ],
+    }
+    if drawing_title:
+        match_stage["drawingTitle"] = re.compile(re.escape(drawing_title), re.IGNORECASE)
+    if drawing_name:
+        match_stage["drawingName"] = re.compile(re.escape(drawing_name), re.IGNORECASE)
+
     pipeline = [
-        {"$match": {
-            "projectId": project_id,
-            "$or": [
-                {"setTrade": trade_regex},
-                {"trade": trade_regex},
-                {"trades.0": trade_regex},
-            ],
-        }},
+        {"$match": match_stage},
         {"$group": {
             "_id": "$drawingId",
             "drawingTitle": {"$first": "$drawingTitle"},
             "drawingName": {"$first": "$drawingName"},
             "setTrade": {"$first": {"$ifNull": ["$setTrade", "$trade"]}},
+            "pdfName": {"$first": "$pdfName"},
+            "s3BucketPath": {"$first": "$s3BucketPath"},
             "fragment_count": {"$sum": 1},
         }},
         {"$sort": {"drawingName": 1}},
@@ -178,4 +212,59 @@ def search_drawings_by_trade(
 
     results = list(coll.aggregate(pipeline, allowDiskUse=True, maxTimeMS=30000))
     logger.info(f"search_drawings_by_trade: project={project_id}, trade={trade}, found={len(results)}")
+    return results
+
+
+def list_unique_drawing_titles(
+    project_id: int,
+    set_id: int = None,
+) -> List[Dict]:
+    """Get unique drawingTitle + drawingName pairs for a project.
+
+    Used by the orchestrator for document discovery when the agent cannot
+    answer a question — presents available document groups to the user.
+
+    Returns a deduplicated list sorted by drawingTitle, with:
+    - drawingTitle: human-readable title (e.g. "Mechanical Lower Level Plan")
+    - drawingName: drawing identifier (e.g. "M-101")
+    - trade: trade name (e.g. "Mechanical")
+    - pdfName: associated PDF filename
+    - fragment_count: number of OCR fragments for this drawing
+    """
+    project_id = validate_project_id(project_id)
+    coll = get_collection(COLLECTION)
+    match: Dict[str, Any] = {"projectId": project_id}
+    if set_id:
+        match["setId"] = int(set_id)
+
+    pipeline = [
+        {"$match": match},
+        {"$group": {
+            "_id": {"drawingTitle": "$drawingTitle", "drawingName": "$drawingName"},
+            "trade": {"$first": {"$ifNull": ["$setTrade", "$trade"]}},
+            "pdfName": {"$first": "$pdfName"},
+            "fragment_count": {"$sum": 1},
+        }},
+        {"$project": {
+            "_id": 0,
+            "drawingTitle": "$_id.drawingTitle",
+            "drawingName": "$_id.drawingName",
+            "trade": 1,
+            "pdfName": 1,
+            "fragment_count": 1,
+        }},
+        {"$sort": {"drawingTitle": 1}},
+    ]
+
+    results = list(coll.aggregate(pipeline, allowDiskUse=True, maxTimeMS=15000))
+
+    # Handle null/empty titles — fall back to drawingName or pdfName
+    for r in results:
+        if not r.get("drawingTitle"):
+            r["drawingTitle"] = r.get("drawingName") or r.get("pdfName") or "Untitled"
+
+    logger.info(
+        "list_unique_drawing_titles: project=%d, found=%d unique titles",
+        project_id, len(results),
+    )
     return results

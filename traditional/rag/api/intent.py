@@ -223,6 +223,13 @@ def detect_intent(query: str) -> Tuple[str, str]:
                 response = _FRIENDLY_RESPONSES.get(intent_type, "")
                 return (intent_type, response)
 
+    # Check for drawing-specific queries that reference a drawing title/name
+    drawing_name, drawing_title = extract_drawing_reference(text)
+    if drawing_name:
+        return ("drawing_specific", "")
+    if drawing_title:
+        return ("drawing_title_specific", "")
+
     return ("document_query", "")
 
 
@@ -279,3 +286,53 @@ def extract_document_reference(query: str) -> Optional[str]:
         return drawing_title
 
     return None
+
+
+def match_drawing_title(
+    user_input: str,
+    available_titles: list[dict],
+) -> Optional[dict]:
+    """Fuzzy match user's input against known drawing/spec titles.
+
+    Attempts exact match first, then case-insensitive contains, then
+    word-level overlap. Returns the best matching document dict or None.
+
+    Parameters
+    ----------
+    user_input : str
+        Raw user message (e.g., "Check in Mechanical Lower Level Plan")
+    available_titles : list[dict]
+        Documents from orchestrator._discover_documents(), each with
+        drawing_title/section_title, drawing_name, trade, type.
+    """
+    if not user_input or not available_titles:
+        return None
+
+    text = user_input.strip().lower()
+
+    # Pass 1: Exact title match (case-insensitive)
+    for doc in available_titles:
+        title = (doc.get("drawing_title") or doc.get("section_title") or "").lower()
+        name = (doc.get("drawing_name") or "").lower()
+        if title and title in text:
+            return doc
+        if name and name in text:
+            return doc
+
+    # Pass 2: Word overlap scoring (at least 2 matching words)
+    text_words = set(text.split())
+    best_match = None
+    best_score = 0
+
+    for doc in available_titles:
+        title = (doc.get("drawing_title") or doc.get("section_title") or "").lower()
+        title_words = set(title.split())
+        if not title_words:
+            continue
+        overlap = len(text_words & title_words)
+        score = overlap / len(title_words) if title_words else 0
+        if overlap >= 2 and score > best_score:
+            best_score = score
+            best_match = doc
+
+    return best_match if best_score >= 0.5 else None
