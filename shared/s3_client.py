@@ -55,20 +55,16 @@ def download_from_s3(
     if client is None:
         return None
 
-    bucket = bucket or os.environ.get("S3_BUCKET_NAME", "ifieldsmart-drawings")
+    bucket = bucket or os.environ.get("S3_BUCKET_NAME", "ifieldsmart")
 
-    # If s3_path contains a slash, it might be "bucket/key" format
-    if "/" in s3_path and not s3_path.startswith("s3://"):
-        parts = s3_path.split("/", 1)
-        if len(parts) == 2 and not parts[0].endswith(".pdf"):
-            bucket = parts[0]
-            s3_path = parts[1]
-
-    # Strip s3:// prefix if present
+    # Strip s3:// prefix if present (only case where path contains the bucket)
     if s3_path.startswith("s3://"):
         s3_path = s3_path[5:]
         if "/" in s3_path:
             bucket, s3_path = s3_path.split("/", 1)
+
+    # Strip leading slashes
+    s3_path = s3_path.lstrip("/")
 
     # Ensure .pdf extension for temp file
     suffix = ".pdf" if s3_path.lower().endswith(".pdf") else ""
