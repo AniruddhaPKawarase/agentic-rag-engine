@@ -15,15 +15,14 @@ import time
 import uuid
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from gateway.auth import auth_required
 from gateway.models import QueryRequest, UnifiedResponse
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(dependencies=[Depends(auth_required)])
+router = APIRouter()
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +56,7 @@ def _get_config_summary() -> dict:
         }
     except Exception as exc:
         logger.warning("Failed to load config summary: %s", exc)
-        return {"error": "Configuration unavailable"}
+        return {"error": str(exc)}
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +130,8 @@ async def query(request: Request, body: QueryRequest) -> dict:
         generate_document=body.generate_document,
         filter_source_type=body.filter_source_type,
         filter_drawing_name=body.filter_drawing_name,
-        docqa_document=body.docqa_document.model_dump() if body.docqa_document else None,
+        docqa_document=body.docqa_document,
+        mode_hint=body.mode_hint,
     )
     return result
 
@@ -163,9 +163,9 @@ async def query_stream(request: Request, body: QueryRequest) -> StreamingRespons
                 )
                 yield f"data: {json.dumps(result)}\n\n"
             except Exception as exc:
-                yield f"data: {json.dumps({'error': 'An internal error occurred. Please try again.'})}\n\n"
+                yield f"data: {json.dumps({'error': str(exc)})}\n\n"
         except Exception as exc:
-            yield f"data: {json.dumps({'error': 'An internal error occurred. Please try again.'})}\n\n"
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(
@@ -215,7 +215,7 @@ async def web_search(request: Request, body: QueryRequest) -> dict:
         return {"success": False, "error": "Traditional engine not available for web search"}
     except Exception as exc:
         logger.error("Web search failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
+        return {"success": False, "error": str(exc)}
 
 
 # ---------------------------------------------------------------------------
@@ -226,13 +226,10 @@ async def web_search(request: Request, body: QueryRequest) -> dict:
 async def create_session(request: Request, body: dict = {}) -> dict:
     """Create a new session."""
     try:
-        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
-        mm = get_memory_manager()
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
         session_id = mm.create_session(
-            user_query=body.get("initial_query", "Session created via API"),
             project_id=body.get("project_id"),
-            filter_source_type=body.get("filter_source_type"),
-            session_id=body.get("session_id"),
         )
         return {"success": True, "session_id": session_id}
     except ImportError:
@@ -241,31 +238,22 @@ async def create_session(request: Request, body: dict = {}) -> dict:
         return {"success": True, "session_id": session_id, "stub": True}
     except Exception as exc:
         logger.error("Session creation failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
+        return {"success": False, "error": str(exc)}
 
 
 @router.get("/sessions")
 async def list_sessions(request: Request) -> dict:
     """List all sessions."""
     try:
-        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
-        mm = get_memory_manager()
-        sessions = []
-        for sid, session in mm.sessions.items():
-            sessions.append({
-                "session_id": sid,
-                "created_at": session.created_at,
-                "last_accessed": session.last_accessed,
-                "message_count": len(session.messages),
-                "total_tokens": session.total_tokens,
-                "project_id": session.context.project_id,
-            })
-        return {"success": True, "count": len(sessions), "sessions": sessions}
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
+        sessions = mm.list_sessions()
+        return {"success": True, "sessions": sessions}
     except ImportError:
-        return {"success": True, "count": 0, "sessions": [], "stub": True}
+        return {"success": True, "sessions": [], "stub": True}
     except Exception as exc:
         logger.error("List sessions failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
+        return {"success": False, "error": str(exc)}
 
 
 @router.get("/sessions/{session_id}/stats")
@@ -273,250 +261,88 @@ async def session_stats(request: Request, session_id: str) -> dict:
     """Get session stats including engine usage."""
     try:
         from shared.session.manager import get_session_stats_extended
-        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
-        mm = get_memory_manager()
-        # Combine both layers of session stats
-        basic_stats = mm.get_session_stats(session_id)
-        unified_stats = get_session_stats_extended(session_id)
-        return {"success": True, **basic_stats, **unified_stats}
+        stats = get_session_stats_extended(session_id)
+        return {"success": True, **stats}
     except ImportError:
         return {"success": True, "session_id": session_id, "stub": True}
     except Exception as exc:
         logger.error("Session stats failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
+        return {"success": False, "error": str(exc)}
 
 
 @router.get("/sessions/{session_id}/conversation")
 async def session_conversation(request: Request, session_id: str) -> dict:
     """Get conversation history for a session."""
     try:
-        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
-        mm = get_memory_manager()
-        session = mm.get_session(session_id)
-        if not session:
-            return {"success": False, "error": "Session not found"}
-        history = session.get_full_conversation_history(include_summaries=True)
-        return {
-            "success": True,
-            "session_id": session_id,
-            "message_count": len(session.messages),
-            "conversation": history,
-        }
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
+        history = mm.get_conversation(session_id)
+        return {"success": True, "session_id": session_id, "conversation": history}
     except ImportError:
         return {"success": True, "session_id": session_id, "conversation": [], "stub": True}
     except Exception as exc:
         logger.error("Get conversation failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
+        return {"success": False, "error": str(exc)}
 
 
 @router.post("/sessions/{session_id}/update")
 async def update_session(request: Request, session_id: str, body: dict = {}) -> dict:
     """Update session context."""
     try:
-        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
-        mm = get_memory_manager()
-        mm.update_context(
-            session_id=session_id,
-            project_id=body.get("project_id"),
-            filter_source_type=body.get("filter_source_type"),
-            custom_instructions=body.get("custom_instructions"),
-            pinned_documents=body.get("pinned_documents"),
-            pinned_titles=body.get("pinned_titles"),
-        )
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
+        mm.update_session(session_id, body)
         return {"success": True, "session_id": session_id}
     except ImportError:
         return {"success": True, "session_id": session_id, "stub": True}
     except Exception as exc:
         logger.error("Update session failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
+        return {"success": False, "error": str(exc)}
 
 
 @router.delete("/sessions/{session_id}")
 async def delete_session(request: Request, session_id: str) -> dict:
     """Delete a session."""
     try:
-        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
-        mm = get_memory_manager()
-        deleted = mm.clear_session(session_id)
-        return {"success": True, "session_id": session_id, "deleted": deleted}
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
+        mm.delete_session(session_id)
+        return {"success": True, "session_id": session_id, "deleted": True}
     except ImportError:
         return {"success": True, "session_id": session_id, "deleted": True, "stub": True}
     except Exception as exc:
         logger.error("Delete session failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
+        return {"success": False, "error": str(exc)}
 
 
 @router.post("/sessions/{session_id}/pin-document")
 async def pin_document(request: Request, session_id: str, body: dict = {}) -> dict:
     """Pin documents to a session for persistent context."""
     try:
-        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
-        mm = get_memory_manager()
-        doc_ids = body.get("document_ids", [])
-        mm.update_context(
-            session_id=session_id,
-            pinned_documents=doc_ids,
-            pinned_titles=body.get("document_titles", doc_ids),
-        )
-        return {"success": True, "session_id": session_id, "pinned": True, "document_count": len(doc_ids)}
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
+        mm.pin_document(session_id, body.get("document_ids", []))
+        return {"success": True, "session_id": session_id, "pinned": True}
     except ImportError:
         return {"success": True, "session_id": session_id, "pinned": True, "stub": True}
     except Exception as exc:
         logger.error("Pin document failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
+        return {"success": False, "error": str(exc)}
 
 
 @router.delete("/sessions/{session_id}/pin-document")
 async def unpin_document(request: Request, session_id: str, body: dict = {}) -> dict:
     """Unpin documents from a session."""
     try:
-        from traditional.memory_manager import get_memory_manager  # type: ignore[import-untyped]
-        mm = get_memory_manager()
-        mm.update_context(
-            session_id=session_id,
-            pinned_documents=[],
-            pinned_titles=[],
-        )
+        from traditional.memory_manager import MemoryManager  # type: ignore[import-untyped]
+        mm = MemoryManager()
+        mm.unpin_document(session_id, body.get("document_ids", []))
         return {"success": True, "session_id": session_id, "unpinned": True}
     except ImportError:
         return {"success": True, "session_id": session_id, "unpinned": True, "stub": True}
     except Exception as exc:
         logger.error("Unpin document failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
-
-
-# ---------------------------------------------------------------------------
-# Document Discovery (Angular UI integration)
-# ---------------------------------------------------------------------------
-
-@router.get("/projects/{project_id}/documents")
-async def discover_documents(request: Request, project_id: int, set_id: int = None) -> dict:
-    """List available drawing titles and spec sections for a project.
-
-    Used by the Angular frontend to show document groups when the agent
-    cannot answer — the user can select a document to scope queries.
-    """
-    try:
-        orchestrator = _get_orchestrator(request)
-        available = await orchestrator._discover_documents(project_id, set_id)
-        return {
-            "success": True,
-            "project_id": project_id,
-            "document_count": len(available),
-            "documents": available,
-        }
-    except Exception as exc:
-        logger.error("Document discovery failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
-
-
-# ---------------------------------------------------------------------------
-# Session Scope Endpoints
-# ---------------------------------------------------------------------------
-
-@router.post("/sessions/{session_id}/scope")
-async def set_scope(request: Request, session_id: str, body: dict = {}) -> dict:
-    """Set document scope for a session."""
-    try:
-        from shared.session.manager import set_document_scope
-
-        # Sanitize inputs — strip control characters, limit length
-        import re
-        def _sanitize(val: str, max_len: int = 200) -> str:
-            if not val:
-                return ""
-            return re.sub(r'[\x00-\x1f\x7f]', '', val)[:max_len].strip()
-
-        result = set_document_scope(
-            session_id=session_id,
-            drawing_title=_sanitize(body.get("drawing_title", "")),
-            drawing_name=_sanitize(body.get("drawing_name", "")),
-            document_type=_sanitize(body.get("document_type", "drawing"), 20),
-            section_title=_sanitize(body.get("section_title", "")),
-            pdf_name=_sanitize(body.get("pdf_name", "")),
-        )
-        return {"success": True, "session_id": session_id, "scope": result}
-    except ImportError:
-        return {"success": True, "session_id": session_id, "scope": {}, "stub": True}
-    except Exception as exc:
-        logger.error("Set scope failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
-
-
-@router.delete("/sessions/{session_id}/scope")
-async def clear_scope(request: Request, session_id: str) -> dict:
-    """Clear document scope, return to full project search."""
-    try:
-        from shared.session.manager import clear_document_scope
-        result = clear_document_scope(session_id)
-        return {"success": True, "session_id": session_id, "scope": result}
-    except ImportError:
-        return {"success": True, "session_id": session_id, "scope": {}, "stub": True}
-    except Exception as exc:
-        logger.error("Clear scope failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
-
-
-@router.get("/sessions/{session_id}/scope")
-async def get_scope(request: Request, session_id: str) -> dict:
-    """Get current document scope state for a session."""
-    try:
-        from shared.session.manager import get_document_scope, get_meta
-        scope = get_document_scope(session_id)
-        meta = get_meta(session_id)
-        return {
-            "success": True,
-            "session_id": session_id,
-            "scope": scope,
-            "previously_scoped": meta.previously_scoped,
-        }
-    except ImportError:
-        return {"success": True, "session_id": session_id, "scope": {}, "stub": True}
-    except Exception as exc:
-        logger.error("Get scope failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
-
-
-# ---------------------------------------------------------------------------
-# Admin / Maintenance Endpoints
-# ---------------------------------------------------------------------------
-
-@router.get("/admin/sessions")
-async def admin_list_sessions(request: Request) -> dict:
-    """Admin: list all active sessions with scope state."""
-    try:
-        from shared.session.manager import _session_meta
-        sessions = []
-        for sid, meta in _session_meta.items():
-            sessions.append({
-                "session_id": sid,
-                "last_engine": meta.last_engine,
-                "total_cost_usd": meta.total_cost_usd,
-                "scope": meta.scope.to_dict(),
-                "engine_usage": meta.engine_usage.to_dict(),
-            })
-        return {"success": True, "count": len(sessions), "sessions": sessions}
-    except ImportError:
-        return {"success": True, "count": 0, "sessions": [], "stub": True}
-
-
-@router.post("/admin/cache/refresh")
-async def admin_cache_refresh(request: Request, body: dict = {}) -> dict:
-    """Admin: refresh or invalidate title cache."""
-    try:
-        from gateway.title_cache import invalidate_project, invalidate_all, get_cache_stats
-        project_id = body.get("project_id")
-        if project_id:
-            existed = invalidate_project(int(project_id))
-            return {"success": True, "action": "invalidate_project", "project_id": project_id, "existed": existed}
-        else:
-            count = invalidate_all()
-            return {"success": True, "action": "invalidate_all", "cleared": count}
-    except ImportError:
-        return {"success": True, "action": "noop", "stub": True}
-    except Exception as exc:
-        logger.error("Cache refresh failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
+        return {"success": False, "error": str(exc)}
 
 
 # ---------------------------------------------------------------------------
@@ -545,10 +371,10 @@ async def test_retrieve(
             "results": results[:top_k],
         }
     except ImportError as exc:
-        return {"success": False, "error": "Traditional engine not available"}
+        return {"success": False, "error": f"Traditional engine not available: {exc}"}
     except Exception as exc:
         logger.error("Test retrieve failed: %s", exc)
-        return {"success": False, "error": "An internal error occurred. Please try again."}
+        return {"success": False, "error": str(exc)}
 
 
 @router.get("/debug-pipeline")
@@ -566,14 +392,20 @@ async def debug_pipeline(request: Request) -> dict:
         "traditional": {
             "faiss_loaded": orchestrator.traditional.is_loaded,
         },
-        "title_cache": {},
     }
 
-    # Add title cache stats
+    # Try to get agentic module info
     try:
-        from gateway.title_cache import get_cache_stats
-        debug_info["title_cache"] = get_cache_stats()
+        import agentic  # type: ignore[import-untyped]
+        debug_info["agentic"]["module_path"] = str(agentic.__file__)
     except ImportError:
-        debug_info["title_cache"] = {"status": "not available"}
+        debug_info["agentic"]["module_path"] = "not importable"
+
+    # Try to get traditional module info
+    try:
+        import traditional  # type: ignore[import-untyped]
+        debug_info["traditional"]["module_path"] = str(traditional.__file__)
+    except ImportError:
+        debug_info["traditional"]["module_path"] = "not importable"
 
     return debug_info

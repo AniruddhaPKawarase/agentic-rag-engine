@@ -1,9 +1,57 @@
 # Unified RAG Agent -- Sandbox API Reference
 
 **Environment:** SANDBOX (non-production)
-**Base URL:** `http://54.197.189.113:8001`
-**Protocol:** HTTP (no TLS)
+**Primary Base URL (HTTPS):** `https://ai6.ifieldsmart.com/rag` &nbsp;&nbsp;← use this from any external client
+**Direct Base URL (HTTP, VM-local only):** `http://54.197.189.113:8001` &nbsp;&nbsp;← intranet / debugging only
+**Protocol:** TLS 1.2 / 1.3 (Let's Encrypt cert, auto-renew enabled)
 **Auth:** `X-API-Key` header on all endpoints except `/`, `/health`, `/metrics`
+
+Every endpoint documented below is reachable at **both** URLs. Replace the prefix:
+
+```
+https://ai6.ifieldsmart.com/rag/<endpoint>     ← public HTTPS (preferred)
+http://54.197.189.113:8001/<endpoint>          ← direct (same service, no TLS)
+```
+
+SSE streaming endpoint (`/rag/query/stream`) has `proxy_buffering off` in nginx so Server-Sent Events reach the client token-by-token.
+
+> Other sandbox agents (SQL, Construction, Ingestion, Gateway Health, Document QA) are documented in the cross-agent reference at `PROD_SETUP/docs/API_REFERENCE_SANDBOX_ALL.md`. This file covers **Unified RAG only**.
+
+---
+
+## Changelog
+
+### 2026-04-20 -- ai6.ifieldsmart.com Sandbox Gateway Provisioned
+
+- **DNS:** `ai6.ifieldsmart.com` A record → `54.197.189.113` (sandbox VM) live on all public resolvers.
+- **TLS:** Let's Encrypt cert issued (`/etc/letsencrypt/live/ai6.ifieldsmart.com/`), TLS 1.2+1.3, auto-renew scheduled via certbot timer. Expires 2026-07-19.
+- **Nginx:** New server block at `/etc/nginx/sites-enabled/ai6.ifieldsmart.com` mirrors the `vcs-gateway` routing (rag/sql/construction/ingestion/gateway/docqa prefixes). HTTP (port 80) redirects to HTTPS except under `/.well-known/acme-challenge/` for future renewals.
+- **Verified:** 10-question replay against `project_7166_results.csv` baseline via `https://ai6.ifieldsmart.com/rag/*` — all 10 returned HTTP 200, engine mix 6 traditional / 4 agentic (Fix A+B active), avg response 11.1s. JSON + DOCX report saved under `test_results/ai6_verification_<timestamp>/`.
+- **Rollback:** Delete symlink `/etc/nginx/sites-enabled/ai6.ifieldsmart.com` and reload nginx. Backend agents are unaffected.
+
+### 2026-04-20 -- Agentic Over-Confidence Detection (Fix B)
+
+- **Scope:** `gateway/orchestrator.py` only. No endpoint additions or contract changes.
+- **Problem:** Even after Fix A restored the Traditional RAG fallback, some queries still skipped it because AgenticRAG returned `confidence="high"` alongside answers that were actually evasive ("I was unable to locate drawing S-201...", "After searching, there are no sections that explicitly list...", "I reached the maximum number of search steps..."). The baseline CSV showed Traditional RAG answered these questions correctly.
+- **Fix:** `_should_fallback()` now also triggers when the agentic answer matches an evasive-language heuristic, even at high confidence. Detection has two tiers:
+  - **Evasive opener** (first ~200 chars) — e.g. `^I (was )?unable to...`, `^There (are|is) no ...`, `^The available documents do not ...`, `^A review of the available ... did not ...`, `^I reached the maximum ...`. Single match → fallback.
+  - **Evasive phrase count** anywhere in the body — patterns include `unable to (find|locate|retrieve)`, `(do|does|did) not (contain|provide|include|yield)`, `no (direct|explicit|specific) (evidence|mention|record|references?)`, `only returned results in`, `based on what I found so far`. 2+ matches → fallback, or 1 match + answer < 400 chars → fallback.
+- **Behavior:** Substantive answers (e.g. "The contract documents indicate that unit prices for soil excavation are to be omitted...") are unaffected. Substantive answers that cite specific spec sections still go through AgenticRAG.
+- **Caller impact:** None. Response schema unchanged. Callers will see `fallback_used=true` + `agentic_confidence="high"` more often (previously these were always `false` for evasive-high-confidence cases).
+- **Verification:** 10-question replay against `project_7166_results.csv` baseline — 9/10 questions now hit traditional fallback (baseline had 9-10/10 traditional), token cost dropped from 207k → 44k, avg latency 9.74s vs baseline 10.46s.
+- **Backups:** Pre-Fix-B VM backup at `/home/ubuntu/chatbot/aniruddha/vcsai/unified-rag-agent/_backups/orchestrator_prefixB_<timestamp>.py`. Revert = restore that file + `sudo systemctl restart rag-agent.service`.
+
+### 2026-04-20 -- Orchestrator Fallback Restoration (Fix A)
+
+- **Scope:** `gateway/orchestrator.py` only. No endpoint additions or contract changes.
+- **Problem:** After recent orchestrator changes, when AgenticRAG produced a low-confidence / empty / zero-source result, the gateway returned a `needs_document_selection=True` stub instead of running the FAISS fallback. This caused accuracy regression vs the 2026-04-13 baseline (`project_7166_results.csv`) where ~98% of answers were served by `traditional/gpt-4o`.
+- **Fix:** Restored automatic Traditional RAG fallback. Flow is now:
+  1. AgenticRAG runs first.
+  2. If `_should_fallback()` is true and no session scope is active, the orchestrator calls `TraditionalEngine.query()` (bounded by `fallback_timeout` seconds).
+  3. If traditional returns an answer `>= 20` chars, it is returned with `engine_used="traditional"`, `fallback_used=true`, and `agentic_confidence` preserving the original agentic confidence.
+  4. If traditional also fails / times out, the orchestrator falls through to the document-discovery stub (`needs_document_selection=true`, `available_documents=[...]`).
+- **Caller impact:** None. Response schema is unchanged. Callers that rely on `fallback_used` and `agentic_confidence` fields will now see them populated for low-confidence queries (they were always `false`/`null` during the regression window).
+- **Backups:** Pre-fix orchestrator backed up on the VM at `/home/ubuntu/chatbot/aniruddha/vcsai/unified-rag-agent/_backups/orchestrator_prefixA_<timestamp>.py`. Revert by restoring that file and running `sudo systemctl restart rag-agent.service`.
 
 ---
 
@@ -13,7 +61,7 @@
 
 | Variable | Value |
 |----------|-------|
-| `{{base_url}}` | `http://54.197.189.113:8001` |
+| `{{base_url}}` | `https://ai6.ifieldsmart.com/rag` |
 | `{{project_id}}` | `7222` |
 | `{{session_id}}` | _(create one first via POST /sessions/create)_ |
 | `{{api_key}}` | _(get from team -- omit if sandbox runs in dev mode)_ |
@@ -96,7 +144,7 @@ Fallback triggers: low confidence, answer < 20 chars, no sources, needs_escalati
 Returns service info and available endpoint list. Public (no API key required).
 
 ```bash
-curl http://54.197.189.113:8001/
+curl https://ai6.ifieldsmart.com/rag/
 ```
 
 **Response (200):**
@@ -126,7 +174,7 @@ curl http://54.197.189.113:8001/
 Check initialization status of both engines. Public (no API key required).
 
 ```bash
-curl http://54.197.189.113:8001/health
+curl https://ai6.ifieldsmart.com/rag/health
 ```
 
 **Response (200):**
@@ -153,7 +201,7 @@ Current configuration (secrets redacted).
 
 ```bash
 curl -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/config
+  https://ai6.ifieldsmart.com/rag/config
 ```
 
 **Response (200):**
@@ -184,7 +232,7 @@ curl -H "X-API-Key: {{api_key}}" \
 Main query endpoint. Runs AgenticRAG first; auto-falls back to Traditional RAG on low confidence.
 
 ```bash
-curl -X POST http://54.197.189.113:8001/query \
+curl -X POST https://ai6.ifieldsmart.com/rag/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{
@@ -213,7 +261,7 @@ curl -X POST http://54.197.189.113:8001/query \
 #### Force Agentic Only
 
 ```bash
-curl -X POST http://54.197.189.113:8001/query \
+curl -X POST https://ai6.ifieldsmart.com/rag/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"query": "What XVENT models are specified?", "project_id": 2361, "engine": "agentic"}'
@@ -222,7 +270,7 @@ curl -X POST http://54.197.189.113:8001/query \
 #### Force Traditional Only
 
 ```bash
-curl -X POST http://54.197.189.113:8001/query \
+curl -X POST https://ai6.ifieldsmart.com/rag/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"query": "What electrical panels are shown?", "project_id": 7325, "engine": "traditional"}'
@@ -231,7 +279,7 @@ curl -X POST http://54.197.189.113:8001/query \
 #### With Session
 
 ```bash
-curl -X POST http://54.197.189.113:8001/query \
+curl -X POST https://ai6.ifieldsmart.com/rag/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"query": "Tell me more about the panel ratings", "project_id": 7325, "session_id": "{{session_id}}"}'
@@ -240,7 +288,7 @@ curl -X POST http://54.197.189.113:8001/query \
 #### With Set ID Filter
 
 ```bash
-curl -X POST http://54.197.189.113:8001/query \
+curl -X POST https://ai6.ifieldsmart.com/rag/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"query": "What HVAC units are on the first floor?", "project_id": 2361, "set_id": 101}'
@@ -249,7 +297,7 @@ curl -X POST http://54.197.189.113:8001/query \
 #### With Conversation History (Sessionless)
 
 ```bash
-curl -X POST http://54.197.189.113:8001/query \
+curl -X POST https://ai6.ifieldsmart.com/rag/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{
@@ -265,7 +313,7 @@ curl -X POST http://54.197.189.113:8001/query \
 #### Web Search Mode
 
 ```bash
-curl -X POST http://54.197.189.113:8001/query \
+curl -X POST https://ai6.ifieldsmart.com/rag/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"query": "ASHRAE 90.1 energy code requirements", "project_id": 2361, "search_mode": "web"}'
@@ -276,7 +324,7 @@ Returns `web_answer` populated, `rag_answer` = null, `search_mode` = "web".
 #### Hybrid Mode (RAG + Web in Parallel)
 
 ```bash
-curl -X POST http://54.197.189.113:8001/query \
+curl -X POST https://ai6.ifieldsmart.com/rag/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"query": "What XVENT models and what are the latest industry standards?", "project_id": 2361, "search_mode": "hybrid"}'
@@ -326,7 +374,7 @@ Returns both `rag_answer` and `web_answer` with a combined `answer` field.
 SSE streaming. Tokens arrive as `text/event-stream` events as the model generates them.
 
 ```bash
-curl -N -X POST http://54.197.189.113:8001/query/stream \
+curl -N -X POST https://ai6.ifieldsmart.com/rag/query/stream \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"query": "What XVENT models are specified?", "project_id": 7222}'
@@ -354,7 +402,7 @@ If agentic streaming is unavailable, falls back to a single full-result SSE even
 Simplified response -- returns only `answer`, `sources`, `confidence`, and `engine_used`. Use this when you do not need the full response envelope.
 
 ```bash
-curl -X POST http://54.197.189.113:8001/quick-query \
+curl -X POST https://ai6.ifieldsmart.com/rag/quick-query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"query": "What panels are in the electrical schedule?", "project_id": 7222}'
@@ -381,7 +429,7 @@ curl -X POST http://54.197.189.113:8001/quick-query \
 Dedicated web search endpoint. Uses the Traditional engine's web search capability (OpenAI web_search tool).
 
 ```bash
-curl -X POST http://54.197.189.113:8001/web-search \
+curl -X POST https://ai6.ifieldsmart.com/rag/web-search \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"query": "ASHRAE 90.1 energy code requirements for HVAC", "project_id": 7222}'
@@ -414,10 +462,10 @@ curl -X POST http://54.197.189.113:8001/web-search \
 
 **POST /sessions/create**
 
-Create a new conversation session. Returns a session ID you use in subsequent queries for multi-turn context.
+Create a new conversation session. Uses the global MemoryManager singleton — sessions persist across requests and are backed up to S3.
 
 ```bash
-curl -X POST http://54.197.189.113:8001/sessions/create \
+curl -X POST https://ai6.ifieldsmart.com/rag/sessions/create \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"project_id": 7222}'
@@ -428,12 +476,15 @@ curl -X POST http://54.197.189.113:8001/sessions/create \
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `project_id` | int | No | Associate session with a project |
+| `initial_query` | string | No | Optional first query text (defaults to "Session created via API") |
+| `filter_source_type` | string | No | Default source filter: `"drawing"`, `"specification"`, or `null` |
+| `session_id` | string | No | Custom session ID; auto-generated if omitted |
 
 **Response (200):**
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  "session_id": "session_7b007fb191b2"
 }
 ```
 
@@ -445,23 +496,26 @@ If MemoryManager is unavailable, returns a stub UUID with `"stub": true`.
 
 **GET /sessions**
 
-List all active sessions.
+List all active sessions from the MemoryManager singleton with metadata.
 
 ```bash
 curl -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/sessions
+  https://ai6.ifieldsmart.com/rag/sessions
 ```
 
 **Response (200):**
 ```json
 {
   "success": true,
+  "count": 2,
   "sessions": [
     {
-      "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "project_id": 7222,
-      "created_at": "2026-04-15T10:30:00Z",
-      "message_count": 4
+      "session_id": "session_7b007fb191b2",
+      "created_at": 1744713220.123,
+      "last_accessed": 1744714500.456,
+      "message_count": 8,
+      "total_tokens": 2450,
+      "project_id": 7222
     }
   ]
 }
@@ -473,24 +527,29 @@ curl -H "X-API-Key: {{api_key}}" \
 
 **GET /sessions/{session_id}/stats**
 
-Session statistics including per-engine usage counts and cumulative cost.
+Combined statistics from both layers: MemoryManager (messages, tokens) + unified session (engine usage, cost, scope).
 
 ```bash
 curl -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/sessions/{{session_id}}/stats
+  https://ai6.ifieldsmart.com/rag/sessions/{{session_id}}/stats
 ```
 
 **Response (200):**
 ```json
 {
   "success": true,
-  "engine_usage": {
-    "agentic": 5,
-    "traditional": 1,
-    "fallback": 1
-  },
+  "session_id": "session_7b007fb191b2",
+  "message_count": 6,
+  "summary_count": 0,
+  "total_tokens": 2450,
+  "created_at": "2026-04-15T10:30:00",
+  "last_accessed": "2026-04-15T10:45:00",
+  "context": {"project_id": 7222, "filter_source_type": null},
+  "engine_usage": {"agentic": 3, "traditional": 0, "fallback": 0},
   "last_engine": "agentic",
-  "total_cost_usd": 0.087
+  "total_cost_usd": 0.087,
+  "scope": {"is_active": false, "drawing_title": "", "drawing_name": "", "document_type": "", "section_title": "", "pdf_name": ""},
+  "previously_scoped": []
 }
 ```
 
@@ -500,24 +559,27 @@ curl -H "X-API-Key: {{api_key}}" \
 
 **GET /sessions/{session_id}/conversation**
 
-Full conversation history for a session.
+Full conversation history including summaries. Returns error if session not found.
 
 ```bash
 curl -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/sessions/{{session_id}}/conversation
+  https://ai6.ifieldsmart.com/rag/sessions/{{session_id}}/conversation
 ```
 
 **Response (200):**
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
+  "message_count": 4,
   "conversation": [
-    {"role": "user", "content": "What XVENT models?", "timestamp": 1712345678},
-    {"role": "assistant", "content": "The XVENT models are...", "timestamp": 1712345680}
+    {"role": "user", "content": "What XVENT models?", "timestamp": 1744713220},
+    {"role": "assistant", "content": "The XVENT models are...", "timestamp": 1744713228}
   ]
 }
 ```
+
+**Session not found:** `{"success": false, "error": "Session not found"}`
 
 ---
 
@@ -525,10 +587,10 @@ curl -H "X-API-Key: {{api_key}}" \
 
 **POST /sessions/{session_id}/update**
 
-Update session context such as project, filters, or custom instructions.
+Update session context. Only provided fields are updated; omitted fields remain unchanged.
 
 ```bash
-curl -X POST http://54.197.189.113:8001/sessions/{{session_id}}/update \
+curl -X POST https://ai6.ifieldsmart.com/rag/sessions/{{session_id}}/update \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{
@@ -538,13 +600,21 @@ curl -X POST http://54.197.189.113:8001/sessions/{{session_id}}/update \
   }'
 ```
 
-**Request Body:** Arbitrary key-value pairs to update the session context.
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `project_id` | int | No | Change associated project |
+| `filter_source_type` | string | No | Set source type filter |
+| `custom_instructions` | string | No | Custom LLM instructions |
+| `pinned_documents` | string[] | No | Pin document pdf_names |
+| `pinned_titles` | string[] | No | Human-readable titles for pinned docs |
 
 **Response (200):**
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  "session_id": "session_7b007fb191b2"
 }
 ```
 
@@ -554,18 +624,18 @@ curl -X POST http://54.197.189.113:8001/sessions/{{session_id}}/update \
 
 **DELETE /sessions/{session_id}**
 
-Delete a session and all its history.
+Delete session from memory and S3. Returns `deleted: false` if session not found.
 
 ```bash
 curl -X DELETE -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/sessions/{{session_id}}
+  https://ai6.ifieldsmart.com/rag/sessions/{{session_id}}
 ```
 
 **Response (200):**
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
   "deleted": true
 }
 ```
@@ -576,13 +646,13 @@ curl -X DELETE -H "X-API-Key: {{api_key}}" \
 
 **POST /sessions/{session_id}/pin-document**
 
-Pin documents to a session. When pinned, Traditional RAG scopes FAISS search to only these documents.
+Pin documents to a session for scoped FAISS search. Updates session context with pinned pdf_names.
 
 ```bash
-curl -X POST http://54.197.189.113:8001/sessions/{{session_id}}/pin-document \
+curl -X POST https://ai6.ifieldsmart.com/rag/sessions/{{session_id}}/pin-document \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
-  -d '{"document_ids": ["M-101A", "M-401"]}'
+  -d '{"document_ids": ["M-101A", "M-401"], "document_titles": ["Mechanical Plan", "HVAC Details"]}'
 ```
 
 **Request Body:**
@@ -595,7 +665,7 @@ curl -X POST http://54.197.189.113:8001/sessions/{{session_id}}/pin-document \
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
   "pinned": true
 }
 ```
@@ -609,7 +679,7 @@ curl -X POST http://54.197.189.113:8001/sessions/{{session_id}}/pin-document \
 Remove pinned documents from a session, returning to full project search.
 
 ```bash
-curl -X DELETE http://54.197.189.113:8001/sessions/{{session_id}}/pin-document \
+curl -X DELETE https://ai6.ifieldsmart.com/rag/sessions/{{session_id}}/pin-document \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"document_ids": ["M-101A"]}'
@@ -625,7 +695,7 @@ curl -X DELETE http://54.197.189.113:8001/sessions/{{session_id}}/pin-document \
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
   "unpinned": true
 }
 ```
@@ -640,7 +710,7 @@ List available drawing titles and spec sections for a project. Used by the Angul
 
 ```bash
 curl -H "X-API-Key: {{api_key}}" \
-  "http://54.197.189.113:8001/projects/7222/documents"
+  "https://ai6.ifieldsmart.com/rag/projects/7222/documents"
 ```
 
 **Query Parameters:**
@@ -653,7 +723,7 @@ curl -H "X-API-Key: {{api_key}}" \
 
 ```bash
 curl -H "X-API-Key: {{api_key}}" \
-  "http://54.197.189.113:8001/projects/7222/documents?set_id=101"
+  "https://ai6.ifieldsmart.com/rag/projects/7222/documents?set_id=101"
 ```
 
 **Response (200):**
@@ -681,7 +751,7 @@ curl -H "X-API-Key: {{api_key}}" \
 Set document scope for a session. Subsequent queries in this session are filtered to the scoped document.
 
 ```bash
-curl -X POST http://54.197.189.113:8001/sessions/{{session_id}}/scope \
+curl -X POST https://ai6.ifieldsmart.com/rag/sessions/{{session_id}}/scope \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{
@@ -707,7 +777,7 @@ All inputs are sanitized (control characters stripped, length capped).
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
   "scope": {
     "drawing_title": "M-101A MECHANICAL LOWER LEVEL PLAN",
     "drawing_name": "M-101A",
@@ -726,14 +796,14 @@ Clear document scope, returning the session to full project search.
 
 ```bash
 curl -X DELETE -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/sessions/{{session_id}}/scope
+  https://ai6.ifieldsmart.com/rag/sessions/{{session_id}}/scope
 ```
 
 **Response (200):**
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
   "scope": {}
 }
 ```
@@ -748,14 +818,14 @@ Get the current document scope state for a session.
 
 ```bash
 curl -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/sessions/{{session_id}}/scope
+  https://ai6.ifieldsmart.com/rag/sessions/{{session_id}}/scope
 ```
 
 **Response (200):**
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
   "scope": {
     "drawing_title": "M-101A MECHANICAL LOWER LEVEL PLAN",
     "drawing_name": "M-101A",
@@ -777,7 +847,7 @@ Admin view of all active sessions with scope state, engine usage, and cost track
 
 ```bash
 curl -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/admin/sessions
+  https://ai6.ifieldsmart.com/rag/admin/sessions
 ```
 
 **Response (200):**
@@ -787,7 +857,7 @@ curl -H "X-API-Key: {{api_key}}" \
   "count": 2,
   "sessions": [
     {
-      "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "session_id": "session_7b007fb191b2",
       "last_engine": "agentic",
       "total_cost_usd": 0.087,
       "scope": {
@@ -816,7 +886,7 @@ Invalidate the title cache for a specific project or all projects. Use after doc
 #### Invalidate One Project
 
 ```bash
-curl -X POST http://54.197.189.113:8001/admin/cache/refresh \
+curl -X POST https://ai6.ifieldsmart.com/rag/admin/cache/refresh \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"project_id": 7222}'
@@ -835,7 +905,7 @@ curl -X POST http://54.197.189.113:8001/admin/cache/refresh \
 #### Invalidate All Projects
 
 ```bash
-curl -X POST http://54.197.189.113:8001/admin/cache/refresh \
+curl -X POST https://ai6.ifieldsmart.com/rag/admin/cache/refresh \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{}'
@@ -860,7 +930,7 @@ Test FAISS vector retrieval directly without running the full generation pipelin
 
 ```bash
 curl -H "X-API-Key: {{api_key}}" \
-  "http://54.197.189.113:8001/test-retrieve?query=electrical+panels&project_id=7222&top_k=3"
+  "https://ai6.ifieldsmart.com/rag/test-retrieve?query=electrical+panels&project_id=7222&top_k=3"
 ```
 
 **Query Parameters:**
@@ -899,7 +969,7 @@ Debug information for the orchestrator, both engines, and title cache.
 
 ```bash
 curl -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/debug-pipeline
+  https://ai6.ifieldsmart.com/rag/debug-pipeline
 ```
 
 **Response (200):**
@@ -931,7 +1001,7 @@ curl -H "X-API-Key: {{api_key}}" \
 Prometheus-format metrics for monitoring dashboards. Public (no API key required).
 
 ```bash
-curl http://54.197.189.113:8001/metrics
+curl https://ai6.ifieldsmart.com/rag/metrics
 ```
 
 **Response (200):** Prometheus text format containing:
@@ -988,83 +1058,83 @@ Run these in order to verify the sandbox is working end-to-end:
 
 ```bash
 # 1. Health check -- verify both engines
-curl http://54.197.189.113:8001/health
+curl https://ai6.ifieldsmart.com/rag/health
 
 # 2. Config -- check model and fallback settings
-curl -H "X-API-Key: {{api_key}}" http://54.197.189.113:8001/config
+curl -H "X-API-Key: {{api_key}}" https://ai6.ifieldsmart.com/rag/config
 
 # 3. Create a session
-curl -X POST http://54.197.189.113:8001/sessions/create \
+curl -X POST https://ai6.ifieldsmart.com/rag/sessions/create \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"project_id": 7222}'
 # --> Save the session_id from the response
 
 # 4. Query with session (agentic-first)
-curl -X POST http://54.197.189.113:8001/query \
+curl -X POST https://ai6.ifieldsmart.com/rag/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"query": "What drawings are available?", "project_id": 7222, "session_id": "SESSION_ID_HERE"}'
 
 # 5. Quick query
-curl -X POST http://54.197.189.113:8001/quick-query \
+curl -X POST https://ai6.ifieldsmart.com/rag/quick-query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"query": "Panel ratings?", "project_id": 7222}'
 
 # 6. Force traditional engine
-curl -X POST http://54.197.189.113:8001/query \
+curl -X POST https://ai6.ifieldsmart.com/rag/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"query": "What electrical panels?", "project_id": 7222, "engine": "traditional"}'
 
 # 7. Discover documents for the project
 curl -H "X-API-Key: {{api_key}}" \
-  "http://54.197.189.113:8001/projects/7222/documents"
+  "https://ai6.ifieldsmart.com/rag/projects/7222/documents"
 
 # 8. Set scope on a document
-curl -X POST http://54.197.189.113:8001/sessions/SESSION_ID_HERE/scope \
+curl -X POST https://ai6.ifieldsmart.com/rag/sessions/SESSION_ID_HERE/scope \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"drawing_name": "M-101A", "document_type": "drawing"}'
 
 # 9. Query within scope
-curl -X POST http://54.197.189.113:8001/query \
+curl -X POST https://ai6.ifieldsmart.com/rag/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: {{api_key}}" \
   -d '{"query": "What equipment is on this drawing?", "project_id": 7222, "session_id": "SESSION_ID_HERE"}'
 
 # 10. Check scope state
 curl -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/sessions/SESSION_ID_HERE/scope
+  https://ai6.ifieldsmart.com/rag/sessions/SESSION_ID_HERE/scope
 
 # 11. Clear scope
 curl -X DELETE -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/sessions/SESSION_ID_HERE/scope
+  https://ai6.ifieldsmart.com/rag/sessions/SESSION_ID_HERE/scope
 
 # 12. Session stats
 curl -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/sessions/SESSION_ID_HERE/stats
+  https://ai6.ifieldsmart.com/rag/sessions/SESSION_ID_HERE/stats
 
 # 13. Conversation history
 curl -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/sessions/SESSION_ID_HERE/conversation
+  https://ai6.ifieldsmart.com/rag/sessions/SESSION_ID_HERE/conversation
 
 # 14. Test FAISS retrieval directly
 curl -H "X-API-Key: {{api_key}}" \
-  "http://54.197.189.113:8001/test-retrieve?query=electrical+panels&project_id=7222&top_k=3"
+  "https://ai6.ifieldsmart.com/rag/test-retrieve?query=electrical+panels&project_id=7222&top_k=3"
 
 # 15. Admin -- view all sessions
 curl -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/admin/sessions
+  https://ai6.ifieldsmart.com/rag/admin/sessions
 
 # 16. Debug pipeline
 curl -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/debug-pipeline
+  https://ai6.ifieldsmart.com/rag/debug-pipeline
 
 # 17. Cleanup -- delete session
 curl -X DELETE -H "X-API-Key: {{api_key}}" \
-  http://54.197.189.113:8001/sessions/SESSION_ID_HERE
+  https://ai6.ifieldsmart.com/rag/sessions/SESSION_ID_HERE
 ```
 
 ---

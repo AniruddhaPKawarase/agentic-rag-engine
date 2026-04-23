@@ -308,7 +308,7 @@ curl -X POST https://ai5.ifieldsmart.com/rag/query \
 | `web_sources` | object[] | Web search source references (title, URL) |
 | `web_source_count` | integer | Count of web sources |
 | `model_used` | string | LLM model used for generation (e.g., `"gpt-4.1"`) |
-| `token_usage` | object | Token consumption: `{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}` |
+| `token_usage` | object | Token consumption: `{"prompt_tokens": N, "completion_tokens": N, "total_tokens": N}` — actual LLM token counts |
 | `processing_time_ms` | integer | Total processing time in milliseconds |
 | `session_id` | string or null | Session ID (returned if session was used or auto-created) |
 | `search_mode` | string | Effective search mode: `"rag"`, `"web"`, `"hybrid"`, or `"agentic"` |
@@ -423,7 +423,7 @@ curl -X POST https://ai5.ifieldsmart.com/rag/query \
   -d '{
     "query": "Tell me more about the panel ratings",
     "project_id": 7325,
-    "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    "session_id": "session_7b007fb191b2"
   }'
 ```
 
@@ -638,7 +638,7 @@ curl -X POST https://ai5.ifieldsmart.com/rag/web-search \
 
 ### 8. POST /sessions/create -- Create Session
 
-Creates a new conversation session. Sessions persist conversation history and context across multiple queries.
+Creates a new conversation session. Sessions persist conversation history, context, and document scope across multiple queries. Uses the global MemoryManager singleton — sessions survive across requests and are backed up to S3.
 
 **Authentication:** Required (`X-API-Key`)
 
@@ -647,6 +647,9 @@ Creates a new conversation session. Sessions persist conversation history and co
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `project_id` | integer | No | Project to associate with this session |
+| `initial_query` | string | No | Optional initial query text (defaults to "Session created via API") |
+| `filter_source_type` | string | No | Default source type filter: `"drawing"`, `"specification"`, or `null` for all |
+| `session_id` | string | No | Provide a custom session ID; auto-generated if omitted |
 
 **Example Request:**
 ```bash
@@ -663,14 +666,14 @@ curl -X POST https://ai5.ifieldsmart.com/rag/sessions/create \
 | Field | Type | Description |
 |-------|------|-------------|
 | `success` | boolean | `true` if created |
-| `session_id` | string | The new session identifier (UUID) |
-| `stub` | boolean | Present and `true` if MemoryManager is unavailable (fallback stub session) |
+| `session_id` | string | The new session identifier (format: `session_{md5hash12}`) |
+| `stub` | boolean | Present and `true` if MemoryManager is unavailable (fallback UUID session) |
 
 **Example Response (200):**
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  "session_id": "session_7b007fb191b2"
 }
 ```
 
@@ -678,7 +681,7 @@ curl -X POST https://ai5.ifieldsmart.com/rag/sessions/create \
 
 ### 9. GET /sessions -- List Sessions
 
-Returns all active sessions.
+Returns all active sessions from the MemoryManager singleton (in-memory + S3-backed). Includes session metadata for each.
 
 **Authentication:** Required (`X-API-Key`)
 
@@ -693,25 +696,37 @@ curl https://ai5.ifieldsmart.com/rag/sessions \
 | Field | Type | Description |
 |-------|------|-------------|
 | `success` | boolean | `true` if retrieved |
-| `sessions` | object[] | Array of session objects |
+| `count` | integer | Number of active sessions |
+| `sessions` | object[] | Array of session summary objects |
+| `sessions[].session_id` | string | Session identifier |
+| `sessions[].created_at` | float | Unix timestamp of creation |
+| `sessions[].last_accessed` | float | Unix timestamp of last access |
+| `sessions[].message_count` | integer | Number of messages in session |
+| `sessions[].total_tokens` | integer | Cumulative token count |
+| `sessions[].project_id` | integer | Associated project ID |
 | `stub` | boolean | Present and `true` if MemoryManager is unavailable |
 
 **Example Response (200):**
 ```json
 {
   "success": true,
+  "count": 2,
   "sessions": [
     {
-      "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "project_id": 2361,
-      "created_at": "2026-04-15T10:30:00Z",
-      "message_count": 8
+      "session_id": "session_7b007fb191b2",
+      "created_at": 1744713220.123,
+      "last_accessed": 1744714500.456,
+      "message_count": 8,
+      "total_tokens": 2450,
+      "project_id": 2361
     },
     {
-      "session_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-      "project_id": 7325,
-      "created_at": "2026-04-15T11:00:00Z",
-      "message_count": 3
+      "session_id": "session_43d5ff4a46e3",
+      "created_at": 1744712400.789,
+      "last_accessed": 1744713000.321,
+      "message_count": 3,
+      "total_tokens": 850,
+      "project_id": 7325
     }
   ]
 }
@@ -721,7 +736,7 @@ curl https://ai5.ifieldsmart.com/rag/sessions \
 
 ### 10. GET /sessions/{session_id}/stats -- Session Stats
 
-Returns session statistics including engine usage breakdown and cost.
+Returns combined statistics from both session layers: MemoryManager (messages, tokens) and unified session manager (engine usage, cost, scope state).
 
 **Authentication:** Required (`X-API-Key`)
 
@@ -733,7 +748,7 @@ Returns session statistics including engine usage breakdown and cost.
 
 **Example Request:**
 ```bash
-curl https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/stats \
+curl https://ai5.ifieldsmart.com/rag/sessions/session_7b007fb191b2/stats \
   -H "X-API-Key: your-api-key-here"
 ```
 
@@ -743,23 +758,48 @@ curl https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef12345678
 |-------|------|-------------|
 | `success` | boolean | `true` if retrieved |
 | `session_id` | string | Session identifier |
-| `engine_usage` | object | Query counts by engine: `{"agentic": N, "traditional": N, "fallback": N}` |
+| `message_count` | integer | Number of messages in session |
+| `summary_count` | integer | Number of conversation summaries generated |
+| `total_tokens` | integer | Cumulative token count for all messages |
+| `created_at` | string | ISO 8601 creation timestamp |
+| `last_accessed` | string | ISO 8601 last access timestamp |
+| `context` | object | `{project_id, filter_source_type}` |
+| `engine_usage` | object | Query counts: `{"agentic": N, "traditional": N, "fallback": N}` |
 | `last_engine` | string | Engine used for the most recent query |
 | `total_cost_usd` | float | Cumulative cost for this session |
-| `stub` | boolean | Present and `true` if session manager is unavailable |
+| `scope` | object | Current document scope state (see Document Scope endpoints) |
+| `previously_scoped` | object[] | History of previously scoped documents |
 
 **Example Response (200):**
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
+  "message_count": 6,
+  "summary_count": 0,
+  "total_tokens": 2450,
+  "created_at": "2026-04-15T10:30:00",
+  "last_accessed": "2026-04-15T10:45:00",
+  "context": {
+    "project_id": 2361,
+    "filter_source_type": null
+  },
   "engine_usage": {
-    "agentic": 5,
-    "traditional": 1,
-    "fallback": 1
+    "agentic": 3,
+    "traditional": 0,
+    "fallback": 0
   },
   "last_engine": "agentic",
-  "total_cost_usd": 0.087
+  "total_cost_usd": 0.087,
+  "scope": {
+    "is_active": false,
+    "drawing_title": "",
+    "drawing_name": "",
+    "document_type": "",
+    "section_title": "",
+    "pdf_name": ""
+  },
+  "previously_scoped": []
 }
 ```
 
@@ -767,7 +807,7 @@ curl https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef12345678
 
 ### 11. GET /sessions/{session_id}/conversation -- Conversation History
 
-Returns the full conversation history for a session.
+Returns the full conversation history for a session, including any generated summaries of older messages. Returns 404-style error if session not found.
 
 **Authentication:** Required (`X-API-Key`)
 
@@ -779,7 +819,7 @@ Returns the full conversation history for a session.
 
 **Example Request:**
 ```bash
-curl https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/conversation \
+curl https://ai5.ifieldsmart.com/rag/sessions/session_7b007fb191b2/conversation \
   -H "X-API-Key: your-api-key-here"
 ```
 
@@ -787,38 +827,48 @@ curl https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef12345678
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `success` | boolean | `true` if retrieved |
+| `success` | boolean | `true` if retrieved, `false` if session not found |
 | `session_id` | string | Session identifier |
-| `conversation` | object[] | Array of messages with `role`, `content`, and `timestamp` |
-| `stub` | boolean | Present and `true` if MemoryManager is unavailable |
+| `message_count` | integer | Total number of messages in session |
+| `conversation` | object[] | Array of messages with `role`, `content`, and `timestamp`. Includes summary messages (role: system) if conversation was summarized. |
+| `error` | string | Present when `success` is `false` (e.g., "Session not found") |
 
 **Example Response (200):**
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
+  "message_count": 4,
   "conversation": [
     {
       "role": "user",
       "content": "What XVENT models are specified?",
-      "timestamp": 1713178200
+      "timestamp": 1744713220
     },
     {
       "role": "assistant",
       "content": "The XVENT models specified in the project are OHEB-44-* and OHEB-46-*...",
-      "timestamp": 1713178208
+      "timestamp": 1744713228
     },
     {
       "role": "user",
       "content": "What are their CFM ratings?",
-      "timestamp": 1713178250
+      "timestamp": 1744713270
     },
     {
       "role": "assistant",
       "content": "The CFM ratings for the XVENT models are: OHEB-44 at 250 CFM and OHEB-46 at 350 CFM.",
-      "timestamp": 1713178258
+      "timestamp": 1744713278
     }
   ]
+}
+```
+
+**Session Not Found Response:**
+```json
+{
+  "success": false,
+  "error": "Session not found"
 }
 ```
 
@@ -844,11 +894,11 @@ Updates session context such as project association, filters, or custom instruct
 | `filter_source_type` | string | No | Set a default source type filter |
 | `custom_instructions` | string | No | Custom instructions for the session |
 
-The request body accepts any key-value pairs; the session manager stores them as session context.
+Only the provided fields are updated; omitted fields remain unchanged.
 
 **Example Request:**
 ```bash
-curl -X POST https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/update \
+curl -X POST https://ai5.ifieldsmart.com/rag/sessions/session_7b007fb191b2/update \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-api-key-here" \
   -d '{
@@ -870,7 +920,7 @@ curl -X POST https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  "session_id": "session_7b007fb191b2"
 }
 ```
 
@@ -878,7 +928,7 @@ curl -X POST https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef
 
 ### 13. DELETE /sessions/{session_id} -- Delete Session
 
-Permanently deletes a session and its conversation history.
+Permanently deletes a session and its conversation history from both in-memory store and S3 (when `STORAGE_BACKEND=s3`). Also clears the unified session metadata.
 
 **Authentication:** Required (`X-API-Key`)
 
@@ -890,7 +940,7 @@ Permanently deletes a session and its conversation history.
 
 **Example Request:**
 ```bash
-curl -X DELETE https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+curl -X DELETE https://ai5.ifieldsmart.com/rag/sessions/session_7b007fb191b2 \
   -H "X-API-Key: your-api-key-here"
 ```
 
@@ -900,19 +950,18 @@ curl -X DELETE https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-
 |-------|------|-------------|
 | `success` | boolean | `true` if deleted |
 | `session_id` | string | Session identifier |
-| `deleted` | boolean | `true` confirming deletion |
-| `stub` | boolean | Present and `true` if MemoryManager is unavailable |
+| `deleted` | boolean | `true` if session existed and was deleted, `false` if not found |
 
 **Example Response (200):**
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
   "deleted": true
 }
 ```
 
----
+---------------------------------------------------------------------------------------------------------------------------------
 
 ## Document Scope Endpoints
 
@@ -1010,7 +1059,7 @@ All string inputs are sanitized: control characters are stripped and values are 
 
 **Example Request:**
 ```bash
-curl -X POST https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/scope \
+curl -X POST https://ai5.ifieldsmart.com/rag/sessions/session_7b007fb191b2/scope \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-api-key-here" \
   -d '{
@@ -1033,7 +1082,7 @@ curl -X POST https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
   "scope": {
     "drawing_title": "M-401 Mechanical Roof Plan",
     "drawing_name": "M-401",
@@ -1060,7 +1109,7 @@ Clears the document scope for a session, returning to full project-wide search.
 
 **Example Request:**
 ```bash
-curl -X DELETE https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/scope \
+curl -X DELETE https://ai5.ifieldsmart.com/rag/sessions/session_7b007fb191b2/scope \
   -H "X-API-Key: your-api-key-here"
 ```
 
@@ -1077,7 +1126,7 @@ curl -X DELETE https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
   "scope": {}
 }
 ```
@@ -1098,7 +1147,7 @@ Returns the current document scope state for a session.
 
 **Example Request:**
 ```bash
-curl https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/scope \
+curl https://ai5.ifieldsmart.com/rag/sessions/session_7b007fb191b2/scope \
   -H "X-API-Key: your-api-key-here"
 ```
 
@@ -1116,7 +1165,7 @@ curl https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef12345678
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
   "scope": {
     "drawing_title": "M-401 Mechanical Roof Plan",
     "drawing_name": "M-401",
@@ -1132,14 +1181,14 @@ curl https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef12345678
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
   "scope": {},
   "previously_scoped": false
 }
 ```
 
 ---
-
+<!-- 
 ## Admin Endpoints
 
 ---
@@ -1181,7 +1230,7 @@ curl https://ai5.ifieldsmart.com/rag/admin/sessions \
   "count": 2,
   "sessions": [
     {
-      "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "session_id": "session_7b007fb191b2",
       "last_engine": "agentic",
       "total_cost_usd": 0.087,
       "scope": {
@@ -1196,7 +1245,7 @@ curl https://ai5.ifieldsmart.com/rag/admin/sessions \
       }
     },
     {
-      "session_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "session_id": "session_43d5ff4a46e3",
       "last_engine": "traditional",
       "total_cost_usd": 0.023,
       "scope": {},
@@ -1259,7 +1308,7 @@ curl -X POST https://ai5.ifieldsmart.com/rag/admin/cache/refresh \
   "action": "invalidate_all",
   "cleared": 5
 }
-```
+``` -->
 
 ---
 
@@ -1289,7 +1338,7 @@ Pins documents to a session for scoped FAISS search. When documents are pinned, 
 
 **Example Request:**
 ```bash
-curl -X POST https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/pin-document \
+curl -X POST https://ai5.ifieldsmart.com/rag/sessions/session_7b007fb191b2/pin-document \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-api-key-here" \
   -d '{
@@ -1310,7 +1359,7 @@ curl -X POST https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
   "pinned": true
 }
 ```
@@ -1337,7 +1386,7 @@ Removes pinned documents from a session, returning to full-index search.
 
 **Example Request:**
 ```bash
-curl -X DELETE https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/pin-document \
+curl -X DELETE https://ai5.ifieldsmart.com/rag/sessions/session_7b007fb191b2/pin-document \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-api-key-here" \
   -d '{
@@ -1358,7 +1407,7 @@ curl -X DELETE https://ai5.ifieldsmart.com/rag/sessions/a1b2c3d4-e5f6-7890-abcd-
 ```json
 {
   "success": true,
-  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "session_id": "session_7b007fb191b2",
   "unpinned": true
 }
 ```

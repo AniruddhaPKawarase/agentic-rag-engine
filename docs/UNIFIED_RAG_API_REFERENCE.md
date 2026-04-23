@@ -812,6 +812,11 @@ GET http://54.197.189.113:8001/metrics
 **Queries — Fallback test**
 - `POST {{base_url}}/query` — Body: `{"query": "Show me the electrical plans", "project_id": 7166}` (agentic may have no data → fallback)
 
+**Queries — Search Modes**
+- `POST {{base_url}}/query` — RAG only (default): `{"query": "What XVENT models?", "project_id": 2361, "search_mode": "rag"}`
+- `POST {{base_url}}/query` — Web only: `{"query": "ASHRAE 90.1 energy code requirements for HVAC", "project_id": 2361, "search_mode": "web"}`
+- `POST {{base_url}}/query` — Hybrid (both): `{"query": "What XVENT models and what are the latest industry standards?", "project_id": 2361, "search_mode": "hybrid"}`
+
 **Queries — With options**
 - `POST {{base_url}}/query` — Body: `{"query": "What HVAC units?", "project_id": 2361, "set_id": 101}`
 - `POST {{base_url}}/quick-query` — Body: `{"query": "Panel ratings?", "project_id": 2361}`
@@ -835,15 +840,17 @@ GET http://54.197.189.113:8001/metrics
 ### Suggested Test Workflow:
 
 1. `GET /health` → verify both engines
-2. `POST /query` with project 2361 → agentic answer
-3. `POST /query` with project 7325 + `engine: traditional` → traditional answer
+2. `POST /query` with project 2361 → agentic answer (search_mode="rag" default)
+3. `POST /query` with project 7325 + `engine: "traditional"` → traditional answer
 4. `POST /query` with project 7166 (no agentic data) → observe fallback
-5. `POST /sessions/create` → get session_id
-6. `POST /query` with session_id → verify session context
-7. `GET /sessions/{id}/stats` → see engine_usage counts
-8. `GET /sessions/{id}/conversation` → see message history
-9. `POST /quick-query` → simplified response
-10. `GET /debug-pipeline` → verify both engines status
+5. `POST /query` with `search_mode: "web"` → web-only answer (web_answer populated, rag_answer=null)
+6. `POST /query` with `search_mode: "hybrid"` → both rag_answer AND web_answer populated
+7. `POST /sessions/create` → get session_id
+8. `POST /query` with session_id → verify session context
+9. `GET /sessions/{id}/stats` → see engine_usage counts
+10. `GET /sessions/{id}/conversation` → see message history
+11. `POST /quick-query` → simplified response
+12. `GET /debug-pipeline` → verify both engines status
 
 ---
 
