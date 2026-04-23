@@ -305,9 +305,15 @@ class DocQABridge:
         tmp_path: Optional[str] = None
         try:
             tmp_path = await self._download_to_temp(doc_ref)
+            # DocQA validates by file extension. RAG-sourced names sometimes
+            # arrive without ".pdf" — append it when absent so the downstream
+            # multipart filename passes DocQA's extension allowlist.
+            upload_name = doc_ref.get("file_name") or "document.pdf"
+            if not os.path.splitext(upload_name)[1]:
+                upload_name = f"{upload_name}.pdf"
             result = await docqa_client.upload_only(
                 file_path=tmp_path,
-                file_name=doc_ref.get("file_name") or "document.pdf",
+                file_name=upload_name,
                 session_id=existing_sid,
             )
             if result.get("error"):
