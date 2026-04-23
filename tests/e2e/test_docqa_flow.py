@@ -191,7 +191,14 @@ def test_flow6_mode_hint_docqa_overrides_classifier():
 # ────────────────────────────────────────────────────────────── Flow 7
 
 def test_flow7_download_url_is_live_and_fetchable():
-    """Every source_document.download_url returned by RAG is actually reachable."""
+    """Every source_document.download_url returned by RAG is actually reachable.
+
+    Uses GET with a Range header to fetch just the first 1 KB — this is what
+    a real browser does on a <a href> click (method GET). HEAD is intentionally
+    NOT used: S3 rejects HEAD on SigV4 presigned URLs generated for GetObject
+    (the signature is method-scoped to GET). A 200 or 206 Partial Content proves
+    the URL is valid + the credentials have s3:GetObject permission.
+    """
     _require_gateway()
     with _http() as c:
         d = _post_query(c, query="list HVAC drawings")
@@ -203,9 +210,20 @@ def test_flow7_download_url_is_live_and_fetchable():
             url = s.get("download_url")
             if not url:
                 continue
-            head = c.head(url, timeout=15, follow_redirects=True)
-            assert head.status_code in (200, 206, 302), (
-                f"broken download_url: {url} → {head.status_code}"
+            resp = c.get(
+                url,
+                timeout=15,
+                follow_redirects=True,
+                headers={"Range": "bytes=0-1023"},
+            )
+            assert resp.status_code in (200, 206), (
+                f"broken download_url: {url} -> {resp.status_code} "
+                f"body={resp.text[:200]}"
+            )
+            # Bonus sanity: content-type should be PDF-ish
+            ct = (resp.headers.get("content-type") or "").lower()
+            assert "pdf" in ct or "octet-stream" in ct or "binary" in ct, (
+                f"unexpected content-type for {url}: {ct}"
             )
             checked += 1
         assert checked >= 1, "no download_urls were fetchable"

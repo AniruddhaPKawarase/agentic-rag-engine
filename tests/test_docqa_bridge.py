@@ -38,7 +38,9 @@ def mock_mm(fake_session):
 async def test_download_to_temp_uses_boto3_when_available(mock_mm, tmp_path):
     fake_s3 = MagicMock()
     def _download(Bucket, Key, Fileobj):
-        Fileobj.write(b"%PDF-1.4 faked via boto3")
+        # >=100 bytes: the bridge treats smaller downloads as a likely
+        # directory-prefix mistake and falls back to presigned.
+        Fileobj.write(b"%PDF-1.4\n" + b"faked body content " * 20 + b"\n%%EOF\n")
     fake_s3.download_fileobj.side_effect = _download
 
     bridge = DocQABridge(memory_manager=mock_mm, s3_client=fake_s3)
@@ -47,10 +49,11 @@ async def test_download_to_temp_uses_boto3_when_available(mock_mm, tmp_path):
     )
     try:
         assert os.path.exists(path)
-        assert os.path.getsize(path) > 0
+        assert os.path.getsize(path) > 100
         fake_s3.download_fileobj.assert_called_once()
         args, _ = fake_s3.download_fileobj.call_args
-        # The key should have bucket prefix stripped
+        # s3_path already ends with 'foo.pdf' → filename-append logic is a
+        # no-op and the key stays the same.
         assert args[0] == "agentic-ai-production"
         assert args[1] == "drawings/foo.pdf"
     finally:

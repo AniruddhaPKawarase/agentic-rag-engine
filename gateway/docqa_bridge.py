@@ -187,6 +187,16 @@ class DocQABridge:
         file_name = doc_ref.get("file_name") or (key.rsplit("/", 1)[-1] or "document.pdf")
         suffix = os.path.splitext(file_name)[1] or ".pdf"
 
+        # RAG's source_documents[].s3_path is often a PREFIX-ONLY path
+        # (e.g. 'ifieldsmart/.../pdf251...') — the actual PDF key is
+        # s3_path + '/' + file_name + '.pdf'. Append the filename if the
+        # computed key doesn't already end with it.
+        expected_filename = file_name if file_name.lower().endswith(".pdf") else f"{file_name}.pdf"
+        if key and not key.endswith(expected_filename) and not key.endswith(file_name):
+            key = f"{key.rstrip('/')}/{expected_filename}"
+        elif not key:
+            key = expected_filename
+
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
         tmp_path = tmp.name
         tmp.close()
@@ -206,6 +216,19 @@ class DocQABridge:
                 raise RuntimeError(
                     f"DocQABridge: S3 object exceeded {MAX_DOWNLOAD_BYTES} bytes "
                     f"(got {size}); rejecting to avoid disk exhaustion"
+                )
+            # Empty or near-empty downloads almost always mean we pointed at
+            # a directory prefix instead of the actual object. Trigger the
+            # presigned-URL fallback instead of uploading 0 bytes to DocQA.
+            if size < 100:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise RuntimeError(
+                    f"DocQABridge: S3 download returned only {size} bytes "
+                    f"(bucket={bucket}, key={key!r}); likely wrong key. "
+                    f"Falling back to presigned URL."
                 )
             logger.info(
                 "DocQABridge S3 download ok: bucket=%s key=%s size=%s",
