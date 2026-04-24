@@ -6,9 +6,8 @@ Merged AgenticRAG (MongoDB tools, GPT-4.1) + Traditional RAG (FAISS + OpenAI emb
 
 ```
 Query → Gateway (port 8001)
-  → AgenticRAG (primary): MongoDB tools, ReAct loop, 7 tools (4 legacy + 3 spec), 2 collections
+  → AgenticRAG (primary): MongoDB tools, ReAct loop, 11 tools, 3 collections
   → If low confidence/empty/error:
-    → Document discovery aggregation (replaces FAISS fallback)
     → Traditional RAG (fallback): FAISS vector search, 8 projects, LRU embeddings
   → Unified response with engine_used attribution
 ```
@@ -17,18 +16,17 @@ Query → Gateway (port 8001)
 
 | Engine | Data Source | Model | When Used |
 |--------|-----------|-------|-----------|
-| AgenticRAG | MongoDB (drawing 2.8M, specification), 7 tools (4 legacy + 3 spec) | GPT-4.1 | Primary — all queries |
-| Document Discovery | MongoDB aggregation on drawing/specification collections | N/A | When agent cannot answer — surfaces document groups for user scoping |
+| AgenticRAG | MongoDB (drawingVision, drawing 2.8M, specification) | GPT-4.1 | Primary — all queries |
 | Traditional RAG | FAISS indexes (8 projects, OpenAI embeddings) | GPT-4o | Fallback on low confidence, or explicit engine="traditional" |
 
 ## Folder Structure
 
 ```
 unified-rag-agent/
-├── gateway/         ← FastAPI app, router, orchestrator, models, title_cache
-├── agentic/         ← AgenticRAG engine (core/ + tools/), 7 tools (4 legacy + 3 spec)
+├── gateway/         ← FastAPI app, router, orchestrator, models
+├── agentic/         ← AgenticRAG engine (core/ + tools/)
 ├── traditional/     ← Traditional RAG engine (rag/ + services/)
-├── shared/          ← Config, S3 utils, session manager, document scope
+├── shared/          ← Config, S3 utils, session manager
 └── tests/           ← Combined test suite
 ```
 
@@ -51,14 +49,8 @@ unified-rag-agent/
 | DELETE | /sessions/{id} | Delete session |
 | POST | /sessions/{id}/pin-document | Pin for FAISS scoped search |
 | DELETE | /sessions/{id}/pin-document | Unpin |
-| POST | /sessions/{id}/scope | Set document scope (drawing_title, drawing_name) |
-| DELETE | /sessions/{id}/scope | Clear document scope |
-| GET | /sessions/{id}/scope | Get current scope state |
-| GET | /projects/{id}/documents | Document discovery — list drawing titles and spec sections |
-| GET | /admin/sessions | Admin: list all sessions with scope state |
-| POST | /admin/cache/refresh | Admin: invalidate title cache (by project or all) |
 | GET | /test-retrieve | Test FAISS directly |
-| GET | /debug-pipeline | Debug both engines + title cache stats |
+| GET | /debug-pipeline | Debug both engines |
 | GET | /metrics | Prometheus |
 
 ## Key Environment Variables

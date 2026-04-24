@@ -1,0 +1,2117 @@
+[
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified material quantities for concrete in foundation drawings C-101 and C-102?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "Are there any unit prices specified for excavation or backfill in the contract documents?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified material requirements for structural steel members on drawing S-201, including grade and finish?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified insulation R-values for exterior walls and roofs as per the architectural drawings and Division 07?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified finishes for interior walls in Room 101, including paint types and wall coverings?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "Are there any specified performance bonds or payment bonds required from subcontractors in the general conditions?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified material quantities for drywall in typical office areas on drawing A-301?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for temporary heating and cooling during construction, and who is responsible for their cost?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "Are there any specified rebates or incentives for energy-efficient systems mentioned in the specifications?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for commissioning of HVAC systems in Section 23 08 00?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for site security and fencing, and who bears the cost?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for final cleaning and waste removal at project completion?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "Are there any specified liquidated damages for failure to meet substantial completion dates?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for mock-ups or samples for architectural finishes?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for temporary power and water on site?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for protection of existing adjacent structures?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for testing and balancing of air and water systems?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for hazardous material abatement, if any?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for off-site fabrication or pre-assembly?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for sound attenuation between spaces?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for stormwater pollution prevention plans (SWPPP)?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for building information modeling (BIM) coordination?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for elevator installation and testing?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for landscaping and irrigation systems?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for signage and wayfinding?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for fire alarm and suppression systems?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for data and communication cabling?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for kitchen equipment installation?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for laboratory equipment installation?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for access control and security systems?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for audiovisual systems?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for window treatments?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for wall protection (e.g., corner guards, bumper rails)?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for demountable partitions?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for operable walls or folding partitions?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for lockers or storage systems?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for subcontractor pre-qualification outlined in the bid documents?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for temporary site facilities, including offices, restrooms, and parking?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Are there any specific local ordinances or regulations referenced in the specifications that require special permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the required submittals for the exterior cladding system, including lead times for approval?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for environmental permits, such as air quality or stormwater discharge?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for minority or local business enterprise (MBE/LBE) participation?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the required permits for signage installation?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for traffic control plans and associated permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for historical preservation permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the required permits for demolition activities?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for fire department access and approval?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for health department permits (e.g., for kitchens)?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the required permits for elevator installation and inspection?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for electrical permits and inspections?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for plumbing permits and inspections?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the required permits for HVAC system installation and inspection?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for special inspections by the building code?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for geotechnical reports and associated permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the required permits for temporary structures (e.g., scaffolding, tents)?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for noise permits during construction?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for dust control permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the required permits for tree protection or removal?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for storm drain connection permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for sanitary sewer connection permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the required permits for water service connection?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Identify all required permits for gas service connection?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for telecommunication utility permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for cable television utility permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the required permits for fiber optic utility permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for green roof permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for cool roof permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the required permits for rainwater harvesting systems?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for wind turbine installation permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for geothermal system permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the required permits for underground storage tanks?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Identify all required permits for above-ground storage tanks?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for hazardous waste disposal permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for lead-based paint abatement permits?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Permits & Subs",
+    "question": "What are the required permits for asbestos abatement?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "Are there any specific exclusions or clarifications to the scope of work mentioned in the front-end documents?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified boundaries of work for each trade, particularly at interfaces?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "Are there any discrepancies between the reflected ceiling plan (RCP) and the lighting fixture schedule regarding fixture types or locations?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for protection of existing elements to remain?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for coordination drawings from subcontractors?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for field verification of existing conditions prior to new work?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for testing and inspection of installed systems to confirm scope compliance?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for mock-ups or samples for approval prior to full installation?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for commissioning of building systems to verify performance?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for as-built documentation and record drawings?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for owner training on installed systems?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for attic stock or spare parts?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for phased occupancy or partial substantial completion?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for temporary enclosures or weather protection?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for site logistics and material staging areas?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for warranty periods for different components of the work?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for hazardous material handling or disposal within the scope?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for protection of adjacent properties?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for quality control inspections by the contractor?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for third-party quality assurance/quality control (QA/QC)?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for submittal review and approval process?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for coordination with utility companies?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for off-site storage of materials?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for protection of finished surfaces?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for building envelope air and water tightness testing?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for seismic bracing or anchorage?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for accessibility compliance (ADA)?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for firestopping and smoke sealing?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for roof access and maintenance?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for building automation system (BAS) integration?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for data network infrastructure?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for audiovisual system integration?"
+  },
+  {
+    "persona": "Project Manager",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for post-occupancy evaluations?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What is the total estimated cost impact of all specified allowances and contingencies in the project?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any value engineering opportunities in the specifications that could yield substantial cost savings without compromising project goals?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for cost reporting and financial transparency to the owner?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified performance guarantees or warranties that could have financial implications if not met?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for insurance coverage and bonding that impact project overhead?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for owner-furnished equipment and its impact on our procurement budget?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for life-cycle cost analysis for building systems?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for energy modeling and its impact on operational costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized labor or certifications that could increase labor costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for off-site fabrication that could impact logistics and cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for testing and commissioning that have a direct cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for site security and its associated costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for temporary facilities and their rental/setup costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for final cleaning and its associated costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for as-built documentation and its preparation costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for owner training on installed systems and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for building information modeling (BIM) coordination and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized equipment rental and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for specialized transportation or logistics?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for permits and fees that impact the budget?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for environmental mitigation costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for noise or dust control measures and their costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for traffic control plans and their costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for temporary shoring or excavation support and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for dewatering operations and their costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for winter protection or cold weather construction and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized scaffolding or access equipment and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for specialized rigging or lifting operations and their costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized waste disposal (e.g., medical, electronic) and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized surveys (e.g., laser scanning, drone) and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for specialized software or technology for project management?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized training for our staff or subcontractors?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized security systems or personnel?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for specialized communication systems on site?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized IT infrastructure for the project?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized legal or consulting fees?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for obtaining a Certificate of Occupancy, and what documentation is needed?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific local jurisdictional requirements for special inspections not typically encountered?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for environmental impact assessments or mitigation plans?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for public outreach or community engagement related to permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for utility company approvals and coordination agreements?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for hazardous material permits (e.g., storage, transport, disposal)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for specialized trade licenses or certifications for subcontractors?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for bonding and insurance for all subcontractors?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for project closeout documentation for permitting authorities?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for post-construction monitoring or reporting for environmental permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirement for obtaining temporary occupancy permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for coordination with adjacent property owners for permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for public right-of-way encroachment permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for noise variance permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for tree removal or protection permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for stormwater management permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for wastewater discharge permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for wetlands delineation or mitigation permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for flood plain development permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for coastal development permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for fire marshal approvals?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for health department approvals (e.g., food service, medical facilities)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for elevator permits and inspections?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for refrigeration system permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for fuel storage permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for signage permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for solar panel installation permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for green roof permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for rainwater harvesting system permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for wind turbine installation permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for geothermal system permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for underground storage tank permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for hazardous waste transporter permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for lead-based paint abatement contractor certifications?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for asbestos abatement contractor certifications?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for general contractor licenses and registrations in the project jurisdiction?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific owner-furnished items or work by others that require careful coordination to avoid scope gaps?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified performance criteria for major building systems (e.g., HVAC, structural, envelope) that define the project's success?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for value engineering proposals from the contractor?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for coordination with existing facilities or ongoing operations?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for mock-ups or samples that define the acceptable quality and aesthetic standards?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for phased construction or partial turnovers that define distinct scope packages?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for as-built documentation and record drawings that capture the final scope?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for owner training on installed systems, indicating the scope of operational handover?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for attic stock or spare parts that are part of the project's deliverable scope?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for building information modeling (BIM) deliverables and coordination scope?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for site restoration and landscaping at project completion?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for protection of adjacent properties or public access during construction?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for temporary facilities and their removal at project completion?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for warranty periods for different components of the work?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for post-occupancy evaluations or performance monitoring?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for sustainable design certifications (e.g., LEED, WELL) and their associated documentation scope?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for audiovisual systems or specialized communication infrastructure?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for kitchen or laboratory equipment installation and coordination?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialty architectural features or custom fabrications?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for new utility connections or upgrades?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for stormwater management systems or green infrastructure?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for seismic upgrades or bracing?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for accessibility (ADA) compliance?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for building envelope performance (e.g., air barrier, thermal performance)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for acoustic performance between spaces?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized flooring systems (e.g., raised access floors, sports flooring)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for specialized wall finishes (e.g., cleanroom panels, ballistic protection)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized ceiling systems (e.g., acoustical clouds, security ceilings)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized window types (e.g., blast-resistant, bullet-resistant)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for specialized roofing systems (e.g., vegetated roofs, photovoltaic arrays)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized exterior cladding systems (e.g., rainscreens, custom panels)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized landscaping elements (e.g., mature trees, custom planters)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for specialized irrigation systems (e.g., smart irrigation, reclaimed water)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized signage and wayfinding systems?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for owner-provided data or information for system integration?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What is the total estimated cost impact of all specified allowances and contingencies in the project?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any value engineering opportunities in the specifications that could yield substantial cost savings without compromising project goals?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for cost reporting and financial transparency to the owner?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified performance guarantees or warranties that could have financial implications if not met?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for insurance coverage and bonding that impact project overhead?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for owner-furnished equipment and its impact on our procurement budget?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for life-cycle cost analysis for building systems?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for energy modeling and its impact on operational costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized labor or certifications that could increase labor costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for off-site fabrication that could impact logistics and cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for testing and commissioning that have a direct cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for site security and its associated costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for temporary facilities and their rental/setup costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for final cleaning and its associated costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for as-built documentation and its preparation costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for owner training on installed systems and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for building information modeling (BIM) coordination and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized equipment rental and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for specialized transportation or logistics?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for permits and fees that impact the budget?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for environmental mitigation costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for noise or dust control measures and their costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for traffic control plans and their costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for temporary shoring or excavation support and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for dewatering operations and their costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for winter protection or cold weather construction and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized scaffolding or access equipment and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for specialized rigging or lifting operations and their costs?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized waste disposal (e.g., medical, electronic) and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized surveys (e.g., laser scanning, drone) and its cost?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for specialized software or technology for project management?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized training for our staff or subcontractors?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized security systems or personnel?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for specialized communication systems on site?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized IT infrastructure for the project?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for specialized legal or consulting fees?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for obtaining a Certificate of Occupancy, and what documentation is needed?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific local jurisdictional requirements for special inspections not typically encountered?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for environmental impact assessments or mitigation plans?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for public outreach or community engagement related to permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for utility company approvals and coordination agreements?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for hazardous material permits (e.g., storage, transport, disposal)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for specialized trade licenses or certifications for subcontractors?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for bonding and insurance for all subcontractors?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for project closeout documentation for permitting authorities?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for post-construction monitoring or reporting for environmental permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for obtaining temporary occupancy permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for coordination with adjacent property owners for permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for public right-of-way encroachment permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for noise variance permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for tree removal or protection permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for stormwater management permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for wastewater discharge permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for wetlands delineation or mitigation permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for flood plain development permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for coastal development permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for fire marshal approvals?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for health department approvals (e.g., food service, medical facilities)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for elevator permits and inspections?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for refrigeration system permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for fuel storage permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for signage permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for solar panel installation permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for green roof permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for rainwater harvesting system permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for wind turbine installation permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for geothermal system permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for underground storage tank permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for hazardous waste transporter permits?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for lead-based paint abatement contractor certifications?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for asbestos abatement contractor certifications?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for general contractor licenses and registrations in the project jurisdiction?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific owner-furnished items or work by others that require careful coordination to avoid scope gaps?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified performance criteria for major building systems (e.g., HVAC, structural, envelope) that define the project's success?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for value engineering proposals from the contractor?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for coordination with existing facilities or ongoing operations?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for mock-ups or samples that define the acceptable quality and aesthetic standards?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for phased construction or partial turnovers that define distinct scope packages?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for as-built documentation and record drawings that capture the final scope?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for owner training on installed systems, indicating the scope of operational handover?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for attic stock or spare parts that are part of the project's deliverable scope?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for building information modeling (BIM) deliverables and coordination scope?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for site restoration and landscaping at project completion?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for protection of adjacent properties or public access during construction?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for temporary facilities and their removal at project completion?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for warranty periods for different components of the work?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for post-occupancy evaluations or performance monitoring?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for sustainable design certifications (e.g., LEED, WELL) and their associated documentation scope?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for audiovisual systems or specialized communication infrastructure?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for kitchen or laboratory equipment installation and coordination?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialty architectural features or custom fabrications?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for new utility connections or upgrades?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for stormwater management systems or green infrastructure?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for seismic upgrades or bracing?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for accessibility (ADA) compliance?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for building envelope performance (e.g., air barrier, thermal performance)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for acoustic performance between spaces?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized flooring systems (e.g., raised access floors, sports flooring)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for specialized wall finishes (e.g., cleanroom panels, ballistic protection)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized ceiling systems (e.g., acoustical clouds, security ceilings)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized window types (e.g., blast-resistant, bullet-resistant)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for specialized roofing systems (e.g., vegetated roofs, photovoltaic arrays)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized exterior cladding systems (e.g., rainscreens, custom panels)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized landscaping elements (e.g., mature trees, custom planters)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for specialized irrigation systems (e.g., smart irrigation, reclaimed water)?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized signage and wayfinding systems?"
+  },
+  {
+    "persona": "Project Executive",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for owner-provided data or information for system integration?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified material quantities for concrete pours on Level 2, and are there any specific mix design requirements?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "Are there any specific requirements for waste management and recycling of construction debris?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for temporary weather protection during construction of the building envelope?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for protection of existing elements to remain during demolition?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for temporary shoring or bracing for structural elements?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for site logistics, including material delivery and storage areas?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for dust control measures during excavation and demolition?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for noise control measures during construction?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for vibration monitoring near adjacent structures?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for winter protection or cold weather construction procedures?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for hot weather concrete pouring procedures?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for protection of finished surfaces during subsequent work?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for temporary power and lighting on site?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for temporary water supply and drainage?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for temporary sanitary facilities?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for temporary security fencing and gates?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for temporary signage and wayfinding on site?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for temporary pedestrian and vehicular traffic control?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for protection of existing utilities?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for relocation of existing utilities?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for demolition of existing structures?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for cutting and patching of existing construction?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "Are there any specified requirements for repair of existing construction?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for cleaning of existing construction?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Budget & Costs",
+    "question": "What are the specified requirements for protection of existing geological resources?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the required inspection hold points for the structural steel erection as per the building permit documents?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for coordination with local fire department for fire alarm testing and sprinkler system inspections?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for utility shut-offs and re-connections, and who needs to be notified?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for confined space entry permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for excavation permits beyond the general building permit?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for traffic control plans for deliveries and site access?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for noise permits for early morning or late night work?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for dust control measures during demolition or excavation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for stormwater pollution prevention plan (SWPPP) implementation and inspections?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for hazardous material handling and storage permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for lead-based paint or asbestos abatement permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for crane permits and lift plans?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for temporary power and lighting permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for temporary water and sewer connection permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for temporary sanitary facility permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for fire watch personnel during hot work?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for emergency egress and access during construction?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for site security personnel or systems?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for temporary fencing and barriers?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for protection of public access and safety?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for protection of adjacent properties?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for erosion and sediment control measures?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for waste disposal permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for recycling of construction debris?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for storm drain connection permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for sanitary sewer connection permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for water service connection permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Identify all required permits for gas service connection?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for telecommunication utility permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for cable television utility permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for fiber optic utility permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for green roof permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for cool roof permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for rainwater harvesting systems?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for wind turbine installation permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Are there any specific requirements for geothermal system permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for underground storage tanks?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "Identify all required permits for above-ground storage tanks?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Permits & Subs",
+    "question": "What are the specific requirements for hazardous waste disposal permits?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the required tolerances for the concrete slab-on-grade flatness (FF) and levelness (FL) as per the specifications?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specific requirements for mock-ups or samples for approval prior to full installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "Identify the sequencing requirements for the exterior building envelope—what trades must finish before the glazing installation begins?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specific requirements for protection of finished surfaces during subsequent work?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "Are there any discrepancies between the structural drawings and architectural drawings for wall openings or penetrations?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for quality control inspections by the contractor?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for coordination drawings from subcontractors?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for field testing of installed systems (e.g., air barrier, waterproofing)?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for as-built documentation and record drawings from a field perspective?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for owner training on installed systems from a constructability perspective?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for attic stock or spare parts that need to be stored on site?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for building information modeling (BIM) coordination for field use?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for site restoration and landscaping at project completion from a field perspective?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for protection of adjacent properties or public access during construction?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for temporary facilities and their removal at project completion?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for warranty periods for different components of the work from a field perspective?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for post-occupancy evaluations or performance monitoring that impact our field work?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for sustainable design certifications (e.g., LEED, WELL) and their associated field documentation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for audiovisual systems or specialized communication infrastructure installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for kitchen or laboratory equipment installation and coordination?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialty architectural features or custom fabrications installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for new utility connections or upgrades from a field perspective?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for stormwater management systems or green infrastructure installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for seismic upgrades or bracing installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for accessibility (ADA) compliance from a field perspective?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for building envelope performance (e.g., air barrier, thermal performance) installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for acoustic performance between spaces installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized flooring systems (e.g., raised access floors, sports flooring) installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for specialized wall finishes (e.g., cleanroom panels, ballistic protection) installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized ceiling systems (e.g., acoustical clouds, security ceilings) installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized window types (e.g., blast-resistant, bullet-resistant) installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for specialized roofing systems (e.g., vegetated roofs, photovoltaic arrays) installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized exterior cladding systems (e.g., rainscreens, custom panels) installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized landscaping elements (e.g., mature trees, custom planters) installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "Are there any specific requirements for specialized irrigation systems (e.g., smart irrigation, reclaimed water) installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for specialized signage and wayfinding systems installation?"
+  },
+  {
+    "persona": "Project Superintendent",
+    "category": "Scope Management",
+    "question": "What are the specified requirements for owner-provided data or information for system integration from a field perspective?"
+  }
+]

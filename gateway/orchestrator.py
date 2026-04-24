@@ -12,14 +12,100 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
 import threading
 import time
 from typing import Any, Optional
+
+from gateway.docqa_bridge import DocQABridge
+from gateway.intent_classifier import classify, IntentDecision
 
 logger = logging.getLogger(__name__)
 
 # Confidence string → numeric score mapping
 CONFIDENCE_SCORE_MAP = {"high": 0.9, "medium": 0.6, "low": 0.2}
+
+
+# ---------------------------------------------------------------------------
+# Feature flags (additive, default-off). Flip via env vars without redeploying.
+# ---------------------------------------------------------------------------
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+MULTI_QUERY_RRF_ENABLED = _env_flag("MULTI_QUERY_RRF_ENABLED", False)
+RERANKER_ENABLED = _env_flag("RERANKER_ENABLED", False)
+RERANKER_KEEP_TOP_K = int(os.environ.get("RERANKER_KEEP_TOP_K", "0")) or None
+# Drop sources below this rerank score (0 = off). Default 5.0 kills the
+# "90% of references are irrelevant drawings" UX complaint while leaving the
+# reranker's top-scored sources intact. RERANKER_MIN_KEEP guarantees a floor
+# so a hyper-strict query never ends up with an empty source list.
+RERANKER_SCORE_THRESHOLD = float(os.environ.get("RERANKER_SCORE_THRESHOLD", "5.0"))
+RERANKER_MIN_KEEP = int(os.environ.get("RERANKER_MIN_KEEP", "3"))
+SELF_RAG_ENABLED = _env_flag("SELF_RAG_ENABLED", False)
+
+# --- Fix B: evasive-answer heuristic ---------------------------------------
+# When agentic returns a high-confidence answer whose body reads like
+# "I was unable to find / there is no / documents do not contain ...", we
+# still want to try the traditional FAISS engine. Traditional RAG frequently
+# finds the information in a different chunking / index that the agentic
+# MongoDB tools missed.
+_EVASIVE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(i\s+)?(was\s+)?unable\s+to\s+(find|locate|identify|determine|retrieve)\b", re.I),
+    re.compile(r"\bcould\s+not\s+(find|locate|determine|identify|retrieve)\b", re.I),
+    re.compile(r"\bno\s+(direct|explicit|specific)?\s*(evidence|mention|record|reference|references)\b", re.I),
+    re.compile(r"\b(do|does|did)\s+not\s+(contain|provide|include|specify|mention|list|yield)\b", re.I),
+    re.compile(r"\bnot\s+(available|found|present|explicitly|specifically|listed)\s+in\b", re.I),
+    re.compile(r"\bthere\s+(are|is)\s+no\s+(sections?|direct|explicit|specific|mention|record|records|information|unit|listings?|references?)\b", re.I),
+    re.compile(r"\bnot\s+(explicitly|directly)\s+(mentioned|provided|specified|listed)\b", re.I),
+    re.compile(r"\breached\s+the\s+maximum\s+number\s+of\s+(search\s+)?steps\b", re.I),
+    re.compile(r"\b(only|just)\s+returned\s+results?\s+in\b", re.I),
+    re.compile(r"\bbased\s+on\s+what\s+i\s+found\s+so\s+far\b", re.I),
+)
+
+# Phrases that almost always mean "agent failed to answer" when they appear
+# near the start of the response — trigger fallback even on a single hit.
+_EVASIVE_OPENERS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^\s*I\s+(was\s+)?unable\s+to\b", re.I),
+    re.compile(r"^\s*I\s+could\s+not\b", re.I),
+    re.compile(r"^\s*I\s+reached\s+the\s+maximum\b", re.I),
+    re.compile(r"^\s*(After|Based\s+on)\s+.{0,60}\s+(there|no)\s+(are|is)\s+no\b", re.I),
+    re.compile(r"^\s*There\s+(are|is)\s+no\b", re.I),
+    re.compile(r"^\s*The\s+available\s+documents\s+do\s+not\b", re.I),
+    re.compile(r"^\s*A\s+review\s+of\s+the\s+available\b.{0,120}\s+did\s+not\b", re.I),
+)
+
+
+def _answer_is_evasive(answer: str) -> bool:
+    """Return True when an agentic answer reads like a dodge.
+
+    Heuristic (ordered cheapest-first):
+    - Empty answer → evasive.
+    - Evasive opener in the first ~200 chars → evasive (agent starts by bailing).
+    - 2+ evasive phrase matches anywhere → evasive.
+    - 1 evasive phrase + short answer (< 400 chars) → evasive.
+
+    A dodge that slips through this filter still costs nothing — Fix A's
+    traditional fallback will take over and, if traditional also can't
+    answer, the original agentic response is preserved via the document-
+    discovery path.
+    """
+    if not answer:
+        return True
+    opener = answer[:200]
+    if any(p.search(opener) for p in _EVASIVE_OPENERS):
+        return True
+    hits = sum(1 for pat in _EVASIVE_PATTERNS if pat.search(answer))
+    if hits >= 2:
+        return True
+    if hits >= 1 and len(answer) < 400:
+        return True
+    return False
 
 
 def _base_response(**overrides: Any) -> dict:
@@ -84,9 +170,81 @@ def _base_response(**overrides: Any) -> dict:
         "active_agent": "rag",
         "suggest_switch": None,
         "selected_document": None,
+        # --- Phase 3.2: intent classifier ---
+        "needs_clarification": False,
+        "clarification_prompt": None,
     }
     base.update(overrides)
     return base
+
+
+# ---------------------------------------------------------------------------
+# DocQA bridge — lazy singleton (Phase 2.4)
+# ---------------------------------------------------------------------------
+
+_docqa_bridge: Optional[DocQABridge] = None
+
+
+def _get_docqa_bridge() -> DocQABridge:
+    """Lazy-initialize the module-level DocQABridge singleton.
+
+    Uses the same memory_manager instance the orchestrator already uses for
+    RAG sessions so DocQA state is keyed by the same session_id.
+    """
+    global _docqa_bridge
+    if _docqa_bridge is None:
+        from traditional.memory_manager import get_memory_manager  # type: ignore
+        _docqa_bridge = DocQABridge(memory_manager=get_memory_manager())
+    return _docqa_bridge
+
+
+# ---------------------------------------------------------------------------
+# Phase 3.2: session access + clarify response helpers
+# ---------------------------------------------------------------------------
+
+def _get_session_for_classifier(session_id: Optional[str]):
+    """Return the ConversationSession for session_id, or a minimal shim
+    with empty selected_documents when session_id is missing or unknown.
+
+    The classifier only reads `.selected_documents`; a shim is safe.
+    """
+    class _Shim:
+        selected_documents: list = []
+        active_agent = "rag"
+        docqa_session_id = None
+        last_intent_decision = None
+    if not session_id:
+        return _Shim()
+    try:
+        from traditional.memory_manager import get_memory_manager
+        mm = get_memory_manager()
+        sess = mm.get_session(session_id)
+        if sess is None:
+            return _Shim()
+        return sess
+    except Exception:
+        return _Shim()
+
+
+def _build_clarify_response(
+    decision: IntentDecision,
+    rag_session_id: Optional[str],
+    selected_document: Optional[dict],
+    query: str,
+) -> dict:
+    """Phase 3.2: build a UnifiedResponse-shaped dict for a clarify decision."""
+    return _base_response(
+        query=query,
+        answer="",
+        success=True,
+        needs_clarification=True,
+        clarification_prompt=decision.clarification_prompt,
+        active_agent="rag",
+        selected_document=selected_document,
+        session_id=rag_session_id or "",
+        engine_used="classifier",
+        confidence="low",
+    )
 
 
 def _build_download_url(s3_path: str, pdf_name: str) -> str | None:
@@ -175,6 +333,138 @@ def _build_download_url(s3_path: str, pdf_name: str) -> str | None:
     return f"https://{bucket}.s3.amazonaws.com/{key_prefix}/{filename}"
 
 
+# Boilerplate title patterns: drawings that appear on every project set as
+# procedural front-matter or general safety info. They are almost never the
+# correct source for a specific user question (material quantities, equipment
+# locations, schedules, sizing, etc.). We hard-drop them before any LLM
+# reranker can accidentally keep them because the title shares a keyword like
+# "1ST FLOOR" with the query.
+_BOILERPLATE_RE = re.compile(
+    r"(?:"
+    r"cover\s*sheets?|area\s*plans?|site\s*photographs?|"
+    r"list\s*of\s*drawings?|general\s*notes?|abbreviations?\s*(?:and|&)\s*general\s*notes?|"
+    r"ADA\s*requirements?|building\s*code\s*data|life\s*safety\s*plans?|"
+    r"slab\s*edge\s*plans?|link\s*beam\s*schedules?|"
+    r"title\s*sheets?|drawing\s*index(?:es)?|sheet\s*index(?:es)?|"
+    r"symbol\s*legends?|north\s*arrow"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _strip_boilerplate_sources(source_documents: Any) -> list[dict] | None:
+    """Return a copy of the list with boilerplate entries removed.
+
+    If every source is boilerplate (rare — means the agent only retrieved
+    front-matter), we keep the originals so the caller never sees an empty
+    list for a question that retrieved something.
+    """
+    if not isinstance(source_documents, list) or not source_documents:
+        return source_documents
+    kept: list[dict] = []
+    dropped = 0
+    for sd in source_documents:
+        if not isinstance(sd, dict):
+            kept.append(sd)
+            continue
+        blob = " ".join(
+            str(sd.get(k) or "")
+            for k in (
+                "display_title", "drawing_title", "drawingTitle",
+                "pdf_name", "pdfName", "file_name",
+                "drawing_name", "drawingName",
+            )
+        )
+        if _BOILERPLATE_RE.search(blob):
+            dropped += 1
+            continue
+        kept.append(sd)
+    if not kept:
+        return source_documents  # keep originals rather than return empty
+    if dropped:
+        logger.info("Stripped %d boilerplate sources from response", dropped)
+    return kept
+
+
+def _maybe_self_rag(query: str, answer: str, source_documents: Any) -> dict | None:
+    """Fix #4: Self-RAG groundedness check on the final answer.
+
+    Feature-flagged. Returns a small dict with ``groundedness_score``,
+    ``claims_total``, ``claims_supported``, ``flagged_claims`` — or ``None``
+    when the flag is off, the answer is too short, or the verifier errored.
+    Strictly additive: never mutates the answer or source_documents.
+    """
+    if not SELF_RAG_ENABLED:
+        return None
+    if not answer or len(answer.strip()) < 40:
+        return None
+    try:
+        from gateway.self_rag import evaluate_groundedness
+        result = evaluate_groundedness(answer=answer, sources=source_documents or [])
+        if result is None:
+            return None
+        return result.to_public()
+    except Exception as exc:
+        logger.warning("Self-RAG evaluation failed: %s", exc)
+        return None
+
+
+def _maybe_rerank(query: str, source_documents: Any) -> Any:
+    """Fix #2: LLM-as-judge reorder of source_documents.
+
+    No-op when the flag is off, the list is empty, or ≤1 item. Returns a new
+    list (same dicts) ordered best-first. Safe to call multiple times.
+    """
+    if not RERANKER_ENABLED:
+        return source_documents
+    if not isinstance(source_documents, list) or len(source_documents) <= 1:
+        return source_documents
+    try:
+        from gateway.reranker import rerank_source_documents
+        return rerank_source_documents(
+            query=query,
+            source_documents=source_documents,
+            keep_top_k=RERANKER_KEEP_TOP_K,
+            score_threshold=RERANKER_SCORE_THRESHOLD,
+            min_keep=RERANKER_MIN_KEEP,
+        )
+    except Exception as exc:
+        logger.warning("Reranker failed, keeping original order: %s", exc)
+        return source_documents
+
+
+def _ensure_signed_source_urls(source_documents: Any) -> None:
+    """Fix #8: In-place re-sign any unsigned download URLs in source_documents.
+
+    The traditional engine builds download URLs from pdf_name + s3_path but does
+    not sign them. Our S3 bucket is private (AccessDenied on unsigned GET), so
+    those URLs 403 in the UI. We detect "no X-Amz-Signature" and regenerate via
+    ``_build_download_url`` which uses SigV4.
+
+    Mutates the list in place. No-op when the list is missing, empty, or all
+    entries already have signed URLs. Safe to call on output from any engine.
+    """
+    if not isinstance(source_documents, list):
+        return
+    for sd in source_documents:
+        if not isinstance(sd, dict):
+            continue
+        existing = sd.get("download_url") or ""
+        if existing and "X-Amz-Signature" in existing:
+            continue  # already signed, leave alone
+        s3_path = sd.get("s3_path") or sd.get("s3BucketPath") or ""
+        pdf_name = sd.get("pdf_name") or sd.get("pdfName") or sd.get("file_name") or ""
+        if not s3_path and not pdf_name:
+            continue
+        try:
+            new_url = _build_download_url(s3_path, pdf_name)
+        except Exception as exc:  # defensive: never break the response over URL re-signing
+            logger.debug("URL re-sign failed for %s/%s: %s", s3_path, pdf_name, exc)
+            continue
+        if new_url:
+            sd["download_url"] = new_url
+
+
 def _extract_source_documents(
     sources: list,
 ) -> tuple[list[dict], list[str]]:
@@ -194,7 +484,15 @@ def _extract_source_documents(
         if isinstance(src, dict):
             s3_path = src.get("s3_path", src.get("s3BucketPath", src.get("sourceFile", "")))
             pdf_name = src.get("pdfName", src.get("pdf_name", ""))
-            download_url = src.get("download_url") or _build_download_url(s3_path, pdf_name)
+            existing_url = src.get("download_url")
+            # Fix #8: Traditional engine returns UNSIGNED URLs which 403 against
+            # our private bucket. Only keep the existing URL if it already has a
+            # SigV4 signature; otherwise regenerate from s3_path + pdf_name so
+            # the client gets a working presigned link.
+            if existing_url and "X-Amz-Signature" in existing_url:
+                download_url = existing_url
+            else:
+                download_url = _build_download_url(s3_path, pdf_name)
             source_documents.append({
                 "s3_path": s3_path,
                 "file_name": src.get("name", src.get("sourceFile", pdf_name or "")),
@@ -237,6 +535,9 @@ def _should_fallback(result: Any) -> bool:
     - confidence is "low"
     - sources list is empty
     - needs_escalation flag is set
+    - Fix B: answer reads like an evasive "unable to find / no evidence" dodge
+      even at high confidence — traditional FAISS frequently finds info the
+      agentic MongoDB tools missed.
     """
     if result is None:
         return True
@@ -255,6 +556,13 @@ def _should_fallback(result: Any) -> bool:
 
     needs_escalation: bool = getattr(result, "needs_escalation", False)
     if needs_escalation:
+        return True
+
+    if _answer_is_evasive(answer):
+        logger.info(
+            "Fix B: agentic high-confidence answer detected as evasive (len=%d) — routing to traditional fallback",
+            len(answer),
+        )
         return True
 
     return False
@@ -426,6 +734,7 @@ class Orchestrator:
         conversation_history: Optional[list] = None,
         search_mode: Optional[str] = None,
         docqa_document: Optional[dict] = None,
+        mode_hint: Optional[str] = None,
         **kwargs: Any,
     ) -> dict:
         """Route a query through the appropriate engine(s).
@@ -435,18 +744,73 @@ class Orchestrator:
         1. If ``search_mode="docqa"`` — route to Document QA agent.
         2. If ``search_mode="web"`` — run web search only.
         3. If ``search_mode="hybrid"`` — run agentic + web in parallel.
-        4. Check session scope — if active, inject scope filters into agentic.
-        5. Try agentic first.
-        6. If agentic fails → document discovery (list available drawing titles)
+        4. Phase 3.2: auto-route via intent classifier (only when caller did
+           not specify search_mode explicitly).
+        5. Check session scope — if active, inject scope filters into agentic.
+        6. Try agentic first.
+        7. If agentic fails → document discovery (list available drawing titles)
            instead of blind FAISS fallback.
         """
         start = time.monotonic()
+        # [CODE-H3] Preserve original caller intent before defaulting.
+        # explicit_search_mode is None when the caller omitted the field entirely.
+        explicit_search_mode = search_mode
         search_mode = search_mode or "rag"
 
         # Store per-request context for _build_response
         self._last_query = query
         self._last_project_id = project_id
         self._last_session_id = session_id
+
+        # --- Phase 3.2: auto-route via intent classifier ---
+        # Only classify when caller did NOT explicitly pick a search_mode.
+        # An explicit search_mode (even "rag") must be honored without classifier injection.
+        if explicit_search_mode is None and not docqa_document:  # auto-route path only
+            try:
+                sess = _get_session_for_classifier(session_id)
+                decision = classify(query=query, session=sess, mode_hint=mode_hint)
+                logger.info(
+                    "intent_decision: target=%s conf=%.2f reason=%s",
+                    decision.target, decision.confidence, decision.reason,
+                )
+                # Record for downstream debugging (non-persistent, best-effort)
+                try:
+                    sess.last_intent_decision = {
+                        "target": decision.target,
+                        "confidence": decision.confidence,
+                        "reason": decision.reason,
+                    }
+                except Exception:
+                    pass
+
+                if decision.target == "clarify":
+                    return _build_clarify_response(
+                        decision,
+                        rag_session_id=session_id,
+                        selected_document=(
+                            sess.selected_documents[-1]
+                            if getattr(sess, "selected_documents", None)
+                            else None
+                        ),
+                        query=query,
+                    )
+
+                if decision.target == "docqa":
+                    # Promote last selected doc into docqa_document so _run_docqa works
+                    effective_docqa_doc = docqa_document
+                    if not effective_docqa_doc and getattr(sess, "selected_documents", None):
+                        effective_docqa_doc = sess.selected_documents[-1]
+                    if effective_docqa_doc:
+                        return await self._run_docqa(
+                            query=query,
+                            project_id=project_id,
+                            session_id=session_id,
+                            docqa_document=effective_docqa_doc,
+                            start=start,
+                        )
+                    # No doc available to hand off — fall through to RAG
+            except Exception as exc:
+                logger.exception("intent classifier error — falling back to RAG: %s", exc)
 
         # --- DocQA mode: route to Document QA agent ---
         if search_mode == "docqa":
@@ -490,6 +854,43 @@ class Orchestrator:
             except ImportError:
                 pass
 
+        # --- Fix #1: Multi-Query + RAG-Fusion pre-retrieval hint (feature-flagged) ---
+        # When MULTI_QUERY_RRF_ENABLED=true, we decompose the user's question,
+        # fan out to the agent's own search tools, fuse results with RRF, and
+        # inject the top candidates as an rrf_hint via scope so the agent can
+        # append it to the LAST user message (cache-preserving, Phase 1.3).
+        # The hint is no longer prepended into conversation_history as a system
+        # message — that approach busted the OpenAI auto-cache on every turn.
+        rrf_scope: dict | None = None
+        multi_query_diagnostic: dict | None = None
+        if MULTI_QUERY_RRF_ENABLED and not scope:
+            try:
+                from gateway.retrieval_enrichment import build_context_hint, format_hint_for_agent
+                hint = await asyncio.to_thread(
+                    build_context_hint, query=query, project_id=project_id,
+                )
+                hint_text = format_hint_for_agent(hint)
+                if hint_text:
+                    # Pass via scope so agent appends to last user message only
+                    rrf_scope = {"rrf_hint": hint_text}
+                    multi_query_diagnostic = {
+                        "sub_queries": hint.get("sub_queries"),
+                        "fused_top": len(hint.get("fused") or []),
+                        "total_candidates_considered": hint.get("total_candidates_considered"),
+                        "num_source_lists": hint.get("num_source_lists"),
+                    }
+                    logger.info(
+                        "Multi-query RRF hint injected via scope (cache-safe): %d sub-queries, %d fused, %d candidates",
+                        len(hint.get("sub_queries") or []),
+                        len(hint.get("fused") or []),
+                        hint.get("total_candidates_considered") or 0,
+                    )
+            except Exception as exc:
+                logger.warning("Multi-query RRF enrichment failed: %s — proceeding without hint", exc)
+
+        # Merge rrf_scope into scope (rrf_scope is only set when scope was None above)
+        effective_scope = scope or rrf_scope
+
         # --- Try agentic (with scope if active) ---
         agentic_result = None
         agentic_error: Optional[str] = None
@@ -499,7 +900,7 @@ class Orchestrator:
                 project_id=project_id,
                 set_id=set_id,
                 conversation_history=conversation_history,
-                scope=scope,
+                scope=effective_scope,
             )
         except Exception as exc:
             agentic_error = str(exc)
@@ -581,10 +982,10 @@ class Orchestrator:
                 resp["scoped_to"] = scope.get("drawing_title") or scope.get("section_title")
             return resp
 
-        # --- Agentic failed: document discovery instead of FAISS fallback ---
+        # --- Agentic insufficient: try Traditional RAG fallback, then document discovery ---
         agentic_confidence = getattr(agentic_result, "confidence", None)
         logger.info(
-            "Agentic insufficient (confidence=%s) — running document discovery",
+            "Agentic insufficient (confidence=%s) — attempting traditional RAG fallback",
             agentic_confidence,
         )
 
@@ -612,7 +1013,58 @@ class Orchestrator:
             resp["session_stats"] = session_stats
             return resp
 
-        # Not scoped: run document discovery for the full project
+        # Not scoped: Try Traditional RAG fallback BEFORE document discovery.
+        # This restores the pre-regression behavior where FAISS/gpt-4o answered
+        # when agentic returned low confidence / empty / no sources.
+        if self.fallback_enabled:
+            try:
+                trad_result = await asyncio.wait_for(
+                    self.traditional.query(
+                        query=query,
+                        project_id=project_id,
+                        session_id=active_session_id,
+                    ),
+                    timeout=self.fallback_timeout,
+                )
+                trad_answer = (
+                    trad_result.get("answer")
+                    if isinstance(trad_result, dict)
+                    else getattr(trad_result, "answer", "")
+                ) or ""
+
+                if len(trad_answer.strip()) >= 20:
+                    # Traditional produced a real answer — return it.
+                    if active_session_id:
+                        try:
+                            from shared.session.manager import record_engine_use
+                            record_engine_use(active_session_id, "traditional", 0.0)
+                        except ImportError:
+                            pass
+                    trad_elapsed_ms = int((time.monotonic() - start) * 1000)
+                    resp = self._build_response(
+                        result=trad_result,
+                        engine="traditional",
+                        elapsed_ms=trad_elapsed_ms,
+                        fallback_used=True,
+                        error=None,
+                    )
+                    resp["agentic_confidence"] = agentic_confidence
+                    resp["session_id"] = active_session_id
+                    resp["session_stats"] = session_stats
+                    return resp
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Traditional RAG fallback timed out after %ss — falling through to document discovery",
+                    self.fallback_timeout,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Traditional RAG fallback failed: %s — falling through to document discovery",
+                    exc,
+                )
+
+        # Both engines insufficient: run document discovery for the full project
+        elapsed_ms = int((time.monotonic() - start) * 1000)
         resp = self._build_response(
             result=agentic_result,
             engine="agentic",
@@ -753,167 +1205,37 @@ class Orchestrator:
         docqa_document: Optional[dict],
         start: float,
     ) -> dict:
-        """Route query to the Document QA agent.
+        """Phase 2.4: bridge-driven DocQA handoff.
 
-        Two modes:
-        1. First call with docqa_document → download PDF from S3, upload to DocQA
-        2. Follow-up call without docqa_document → forward query to existing DocQA session
+        Delegates S3 fetch + DocQA upload + session state persistence +
+        /api/chat forward + response normalization to DocQABridge.
+        Returns a UnifiedResponse-shaped dict.
+
+        Exceptions inside the bridge flow are caught and converted into a
+        graceful docqa_fallback response (active_agent back to 'rag') via
+        bridge.normalize() so the user never sees a 5xx.
         """
-        from gateway.docqa_client import upload_and_query, query_document, check_health
-        from gateway.intent_classifier import classify_intent
-
-        elapsed_ms = lambda: int((time.monotonic() - start) * 1000)
-
-        # Check DocQA health
-        if not await check_health():
-            return _base_response(
-                query=query,
-                processing_time_ms=elapsed_ms(),
-                success=False,
-                error="Document QA agent is not running. Please try again later.",
-                search_mode="docqa",
-                engine_used="docqa",
+        bridge = _get_docqa_bridge()
+        try:
+            dq_sid = await bridge.ensure_document_loaded(
+                session_id=session_id,
+                doc_ref=docqa_document or {},
             )
-
-        # Intent classification for hybrid switching
-        intent = classify_intent(query, active_agent="docqa")
-        if intent == "exit_docqa":
-            return _base_response(
-                query=query,
-                answer="Switched back to project search mode. Ask any question about your project.",
-                processing_time_ms=elapsed_ms(),
-                search_mode="rag",
-                engine_used="rag",
-                active_agent="rag",
+            dq_resp = await bridge.ask(docqa_session_id=dq_sid, query=query)
+            return bridge.normalize(
+                docqa_response=dq_resp,
+                rag_session_id=session_id,
+                selected_document=docqa_document,
             )
-        if intent == "suggest_switch_to_rag":
-            return _base_response(
-                query=query,
-                answer=(
-                    "This question seems to be about the broader project, not just the "
-                    "selected document. Would you like to switch back to project search? "
-                    "Click 'Back to Project Search' or rephrase your question for this document."
-                ),
-                processing_time_ms=elapsed_ms(),
-                search_mode="docqa",
-                engine_used="docqa",
-                suggest_switch="rag",
+        except Exception as exc:
+            logger.exception(
+                "DocQA bridge error for session=%s: %s", session_id, exc
             )
-
-        # Resolve DocQA session from RAG session metadata
-        docqa_session_id = None
-        if session_id:
-            try:
-                from shared.session.manager import get_meta
-                meta = get_meta(session_id)
-                docqa_session_id = getattr(meta, "docqa_session_id", None)
-            except (ImportError, Exception):
-                pass
-
-        # Mode 1: New document upload
-        if docqa_document:
-            s3_path = docqa_document.get("s3_path", "")
-            file_name = docqa_document.get("file_name") or s3_path.rsplit("/", 1)[-1]
-            download_url = docqa_document.get("download_url")
-
-            if not file_name.lower().endswith(".pdf"):
-                file_name = f"{file_name}.pdf"
-
-            # Download the PDF
-            tmp_path = None
-            try:
-                from shared.s3_client import download_from_s3, download_from_url
-                tmp_path = download_from_s3(s3_path)
-                if tmp_path is None and download_url:
-                    tmp_path = download_from_url(download_url)
-            except ImportError:
-                logger.warning("s3_client not available, trying download_url")
-                if download_url:
-                    try:
-                        from shared.s3_client import download_from_url
-                        tmp_path = download_from_url(download_url)
-                    except ImportError:
-                        pass
-
-            if tmp_path is None:
-                return _base_response(
-                    query=query,
-                    answer=(
-                        f"Could not download the document '{file_name}'. "
-                        "S3 access may not be configured. Please check AWS credentials."
-                    ),
-                    processing_time_ms=elapsed_ms(),
-                    success=False,
-                    error="S3 download failed",
-                    search_mode="docqa",
-                    engine_used="docqa",
-                )
-
-            # Upload to DocQA and ask the question
-            try:
-                result = await upload_and_query(
-                    file_path=tmp_path,
-                    file_name=file_name,
-                    query=query,
-                    session_id=docqa_session_id,
-                )
-            finally:
-                # Clean up temp file
-                import os
-                try:
-                    os.unlink(tmp_path)
-                except Exception:
-                    pass
-
-            if result.get("error"):
-                return _base_response(
-                    query=query,
-                    processing_time_ms=elapsed_ms(),
-                    success=False,
-                    error=result["error"],
-                    search_mode="docqa",
-                    engine_used="docqa",
-                )
-
-            # Store DocQA session ID in RAG session metadata
-            new_docqa_session = result.get("session_id")
-            if new_docqa_session and session_id:
-                try:
-                    from shared.session.manager import get_meta
-                    meta = get_meta(session_id)
-                    meta.docqa_session_id = new_docqa_session
-                except (ImportError, Exception):
-                    pass
-
-            return self._format_docqa_response(result, query, elapsed_ms(), file_name)
-
-        # Mode 2: Follow-up query on existing DocQA session
-        if docqa_session_id:
-            result = await query_document(docqa_session_id, query)
-            if result.get("error"):
-                return _base_response(
-                    query=query,
-                    processing_time_ms=elapsed_ms(),
-                    success=False,
-                    error=result["error"],
-                    search_mode="docqa",
-                    engine_used="docqa",
-                )
-            return self._format_docqa_response(result, query, elapsed_ms())
-
-        # No document selected and no existing DocQA session
-        return _base_response(
-            query=query,
-            answer=(
-                "No document is currently selected for deep-dive analysis. "
-                "Please select a reference document from the source list first, "
-                "or switch back to project search mode."
-            ),
-            processing_time_ms=elapsed_ms(),
-            search_mode="docqa",
-            engine_used="docqa",
-            needs_document_selection=True,
-        )
+            return bridge.normalize(
+                docqa_response={"error": str(exc)},
+                rag_session_id=session_id,
+                selected_document=docqa_document,
+            )
 
     def _format_docqa_response(
         self,
@@ -1150,6 +1472,27 @@ class Orchestrator:
                 resp["processing_time_ms"] = elapsed_ms
             if error:
                 resp["error"] = error
+            # Fix #8: Force-sign any download URLs the traditional engine returned
+            # unsigned (private bucket returns 403 without a SigV4 signature).
+            _ensure_signed_source_urls(resp.get("source_documents"))
+            # Hard drop of boilerplate sheets (cover, life-safety, general notes, etc.)
+            # These are never the correct source for a specific question.
+            resp["source_documents"] = _strip_boilerplate_sources(resp.get("source_documents"))
+            # Fix #2: optional LLM-as-judge reorder (no-op when flag off)
+            resp["source_documents"] = _maybe_rerank(
+                self._last_query or "", resp.get("source_documents")
+            )
+            # Fix #4: optional self-RAG groundedness (nested under debug_info so
+            # no new top-level fields are introduced)
+            grounded = _maybe_self_rag(
+                self._last_query or "", resp.get("answer", ""), resp.get("source_documents")
+            )
+            if grounded is not None:
+                di = resp.get("debug_info") or {}
+                if not isinstance(di, dict):
+                    di = {}
+                di["groundedness"] = grounded
+                resp["debug_info"] = di
             return resp
 
         # --- Pydantic model results (traditional engine returning model) ---
@@ -1161,6 +1504,20 @@ class Orchestrator:
             resp["agentic_confidence"] = None
             if "processing_time_ms" not in result.model_dump():
                 resp["processing_time_ms"] = elapsed_ms
+            _ensure_signed_source_urls(resp.get("source_documents"))
+            resp["source_documents"] = _strip_boilerplate_sources(resp.get("source_documents"))
+            resp["source_documents"] = _maybe_rerank(
+                self._last_query or "", resp.get("source_documents")
+            )
+            grounded = _maybe_self_rag(
+                self._last_query or "", resp.get("answer", ""), resp.get("source_documents")
+            )
+            if grounded is not None:
+                di = resp.get("debug_info") or {}
+                if not isinstance(di, dict):
+                    di = {}
+                di["groundedness"] = grounded
+                resp["debug_info"] = di
             return resp
 
         # --- Dataclass / object results (agentic engine) → map to full schema ---
@@ -1181,6 +1538,20 @@ class Orchestrator:
 
         confidence_score = CONFIDENCE_SCORE_MAP.get(confidence, 0.5)
         source_documents, s3_paths = _extract_source_documents(raw_sources)
+        # Hard drop of boilerplate sheets before rerank so they can't leak
+        # through on a title-keyword coincidence.
+        source_documents = _strip_boilerplate_sources(source_documents)
+        # Fix #2: optional reorder of agentic sources by direct relevance
+        source_documents = _maybe_rerank(self._last_query or "", source_documents)
+
+        # Fix #4: optional groundedness verification (nested under debug_info)
+        debug_info_dict: dict[str, Any] = {
+            "agentic_steps": steps,
+            "agentic_cost_usd": cost,
+        }
+        grounded = _maybe_self_rag(self._last_query or "", answer, source_documents)
+        if grounded is not None:
+            debug_info_dict["groundedness"] = grounded
 
         return _base_response(
             query=self._last_query or "",
@@ -1201,10 +1572,7 @@ class Orchestrator:
             s3_paths=s3_paths,
             s3_path_count=len(s3_paths),
             source_documents=source_documents,
-            debug_info={
-                "agentic_steps": steps,
-                "agentic_cost_usd": cost,
-            },
+            debug_info=debug_info_dict,
             processing_time_ms=elapsed_ms,
             project_id=self._last_project_id,
             session_id=self._last_session_id,

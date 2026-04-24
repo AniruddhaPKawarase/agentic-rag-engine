@@ -79,12 +79,20 @@ class ConversationSession:
     summaries: List[ConversationSummary]
     total_tokens: int = 0
     metadata: Dict[str, Any] = None
-    
+
+    # --- Phase 2.1 additions (DocQA bridge state) ---
+    active_agent: str = "rag"  # "rag" | "docqa"
+    docqa_session_id: Optional[str] = None
+    selected_documents: List[Dict[str, Any]] = None
+    last_intent_decision: Optional[Dict[str, Any]] = None
+
     def __post_init__(self):
         if self.metadata is None:
             self.metadata = {}
         if self.summaries is None:
             self.summaries = []
+        if self.selected_documents is None:
+            self.selected_documents = []
     
     def get_last_message_by_role(self, role: str) -> Optional[str]:
         """Get the content of the last message with the given role."""

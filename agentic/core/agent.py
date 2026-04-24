@@ -135,6 +135,46 @@ def _sanitize_history(history: List[Dict]) -> List[Dict]:
     ]
 
 
+def build_react_messages(
+    system_prompt: str,
+    conversation_history: list | None,
+    user_query: str,
+    rrf_hint: str | None = None,
+) -> list:
+    """Assemble OpenAI messages with cacheable-prefix ordering.
+
+    Order: [system, ...history, user_query(+hint appended)].
+    The system prompt + tool schema (attached separately by the caller)
+    form the cacheable prefix. Any dynamic RRF hint is APPENDED to the
+    last user message so it never invalidates the prefix cache.
+
+    This preserves OpenAI's automatic prompt cache (>=1024 token prefixes
+    get 50% token discount and ~80% latency reduction on the cached portion).
+    """
+    messages: list = [{"role": "system", "content": system_prompt}]
+    if conversation_history:
+        messages.extend(conversation_history)
+    if rrf_hint:
+        user_content = f"{user_query}\n\n---\n{rrf_hint}"
+    else:
+        user_content = user_query
+    messages.append({"role": "user", "content": user_content})
+    return messages
+
+
+def _log_cache_metrics(usage: dict | None) -> None:
+    """Log cached_tokens / prompt_tokens for observability (Phase 1.3)."""
+    if not isinstance(usage, dict):
+        return
+    cached = usage.get("cached_tokens", 0) or 0
+    total = usage.get("prompt_tokens", 0) or 0
+    ratio = (cached / total) if total else 0.0
+    logger.info(
+        "openai_cache: cached_tokens=%s prompt_tokens=%s hit_ratio=%.2f",
+        cached, total, ratio,
+    )
+
+
 # ── System prompt ─────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """You are a senior construction document analyst with 30+ years of experience.
@@ -152,7 +192,6 @@ YOUR PROCESS:
 2. Search broadly first using legacy_search_text or spec_search.
 3. For content questions: get the actual drawing/spec content, not just listings.
 4. Generate a comprehensive answer ONLY from retrieved data.
-5. Cite sources: [Source: drawingName / drawingTitle] for every fact.
 
 QUERY ROUTING GUIDE:
 - "What's in the electrical plan?" → legacy_search_text
@@ -161,6 +200,25 @@ QUERY ROUTING GUIDE:
 - "CSI Division 23" → spec_search or legacy_search_trade
 - Specific drawing text → legacy_list_drawings to find drawingId, then legacy_get_text
 - Specification section → spec_search, then spec_get_section
+- "How many / count / number of / total X" (counting questions)
+  → ALWAYS call agg_count_equipment FIRST with the entity keyword (e.g. "DOAS", "AHU", "VALVE").
+    Do NOT attempt to count by eyeballing prose — the deterministic aggregation is the source of truth.
+- "Which levels are typical / identical / repeated" (typical-level questions)
+  → ALWAYS call agg_find_typical_levels FIRST. It clusters drawings by normalised title and
+    surfaces explicit "3 THRU 6" hints. Only narrate from its output; do not guess from titles.
+- "Show me the X schedule" where X is a SPECIFIC equipment family
+  (DOAS schedule, AHU schedule, VAV schedule, chiller schedule, etc.)
+  → Prefer agg_list_schedule with schedule_type in {doas, ahu, vav, rtu, fan, pump, valve,
+    plumbing_fixture, panelboard, chiller}.
+  → Do NOT use agg_list_schedule for trade-level queries like "mechanical schedule",
+    "plumbing schedule", "electrical schedule", or "the schedules". For those, use
+    legacy_search_text("<trade> SCHEDULES") and legacy_list_drawings, then return the
+    discovered schedule-sheet names in the answer.
+- "Give me the [trade] schedule" / "give me [trade] drawings" / "which sheets are the
+  [trade] ones" / "riser diagram for [trade]"
+  → Use legacy_search_text with the uppercase trade word ("MECHANICAL SCHEDULES",
+    "PLUMBING RISER DIAGRAM", "ELECTRICAL RISER", etc.) FIRST. Then narrow with
+    legacy_list_drawings if you need sheet numbers or titles.
 
 SHEET NUMBER LOOKUP:
 - FIRST use legacy_list_drawings to find the drawingId for a sheet number.
@@ -300,22 +358,30 @@ def run_agent(
     total_input = 0
     total_output = 0
 
-    # Build initial messages
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    if conversation_history:
-        messages.extend(_sanitize_history(conversation_history))
-
-    # Inject project context
+    # Build initial messages using the cache-preserving order.
     context_hint = f"[Project ID: {project_id}"
     if set_id:
         context_hint += f", Set ID: {set_id}"
     context_hint += "]"
 
-    messages.append({
-        "role": "user",
-        "content": f"{context_hint}\n\n---USER QUERY---\n{query}\n---END QUERY---",
-    })
+    user_content = f"{context_hint}\n\n---USER QUERY---\n{query}\n---END QUERY---"
+
+    sanitized_history = _sanitize_history(conversation_history) if conversation_history else None
+
+    # rrf_hint is read from the callers via scope or conversation_history last-entry;
+    # for now pass None — orchestrator will pass rrf_hint by adding it to scope or
+    # by calling build_react_messages directly in Fix #1. This refactor only changes
+    # ordering; orchestrator will wire the hint in next.
+    rrf_hint_inline = None
+    if isinstance(scope, dict):
+        rrf_hint_inline = scope.get("rrf_hint")
+
+    messages = build_react_messages(
+        system_prompt=SYSTEM_PROMPT,
+        conversation_history=sanitized_history,
+        user_query=user_content,
+        rrf_hint=rrf_hint_inline,
+    )
 
     steps: List[AgentStep] = []
     sources: set = set()
@@ -341,6 +407,17 @@ def run_agent(
 
         total_input += response.usage.prompt_tokens
         total_output += response.usage.completion_tokens
+        # Log OpenAI auto-cache hit rate (Phase 1.3)
+        try:
+            _log_cache_metrics({
+                "cached_tokens": getattr(response.usage, "cached_tokens", 0)
+                                  or (getattr(response.usage, "prompt_tokens_details", None)
+                                      and getattr(response.usage.prompt_tokens_details, "cached_tokens", 0))
+                                  or 0,
+                "prompt_tokens": response.usage.prompt_tokens,
+            })
+        except Exception:
+            pass  # metrics are best-effort, never fail the request
         msg = response.choices[0].message
 
         if msg.tool_calls:

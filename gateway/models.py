@@ -3,30 +3,18 @@ Gateway request / response models — Pydantic v2 BaseModel schemas.
 
 QueryRequest validates inbound queries.
 UnifiedResponse is the standardised envelope returned by the orchestrator.
+
+Phase 1 additions: fields needed for the DocQA bridge and to align the
+Pydantic model with the wire payload the orchestrator actually emits.
+All new fields are Optional with safe defaults — existing clients that
+do not know about these fields are unaffected (forward compatibility).
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class ConversationMessage(BaseModel):
-    """A single message in the conversation history."""
-
-    model_config = ConfigDict(extra="allow")
-
-    role: str = Field(pattern="^(user|assistant)$")
-    content: str = Field(max_length=10000)
-
-
-class DocQADocument(BaseModel):
-    """Document to send to the Document QA agent for deep-dive analysis."""
-
-    s3_path: str = Field(..., min_length=1, max_length=500)
-    file_name: Optional[str] = None
-    download_url: Optional[str] = None
+from pydantic import BaseModel, Field
 
 
 class QueryRequest(BaseModel):
@@ -35,14 +23,16 @@ class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
     project_id: int = Field(..., ge=1, le=999999)
     session_id: Optional[str] = None
-    search_mode: Optional[str] = None  # "rag", "web", "hybrid", "docqa"
+    search_mode: Optional[str] = None
     generate_document: bool = True
     filter_source_type: Optional[str] = None
     filter_drawing_name: Optional[str] = None
     set_id: Optional[int] = None
-    conversation_history: Optional[list[ConversationMessage]] = None
+    conversation_history: Optional[list] = None
     engine: Optional[str] = None
-    docqa_document: Optional[DocQADocument] = None  # for search_mode="docqa"
+    # --- Phase 1 additions (DocQA bridge) ---
+    docqa_document: Optional[dict] = None
+    mode_hint: Optional[str] = None  # "rag" | "docqa" | None (auto)
 
 
 class UnifiedResponse(BaseModel):
@@ -62,8 +52,11 @@ class UnifiedResponse(BaseModel):
     elapsed_ms: int = 0
     total_steps: int = 0
     model: str = ""
-    needs_document_selection: bool = False
-    available_documents: list[dict] = Field(default_factory=list)
-    improved_queries: list[str] = Field(default_factory=list)
-    query_tips: list[str] = Field(default_factory=list)
-    scoped_to: Optional[str] = None
+    # --- Phase 1 additions (schema-aligned to wire truth + DocQA bridge) ---
+    source_documents: Optional[list[dict]] = None
+    active_agent: Optional[str] = "rag"
+    selected_document: Optional[dict] = None
+    clarification_prompt: Optional[str] = None
+    docqa_session_id: Optional[str] = None
+    groundedness_score: Optional[float] = None
+    flagged_claims: Optional[list[dict]] = None

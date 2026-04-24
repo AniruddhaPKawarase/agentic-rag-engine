@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAG + DocQA Agent Demo</title>
+<style>
+  :root{--bg:#0f1117;--surface:#1a1d27;--surface2:#242736;--border:#2e3245;--text:#e1e4ed;--text-dim:#8b8fa3;--accent:#6c63ff;--accent2:#7f78ff;--green:#34d399;--amber:#fbbf24;--red:#f87171;--blue:#60a5fa;--purple:#a78bfa}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column}
+  .top-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .top-bar h1{font-size:16px;font-weight:600}
+  .health-dot{width:10px;height:10px;border-radius:50%;background:var(--red);transition:background .3s}
+  .health-dot.ok{background:var(--green)}
+  .health-label{font-size:12px;color:var(--text-dim)}
+  .config-group{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap}
+  .config-group label{font-size:11px;color:var(--text-dim)}
+  .config-group input,.config-group select{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-size:12px}
+  .btn{padding:6px 14px;border-radius:6px;border:none;font-size:13px;cursor:pointer;font-weight:500;transition:all .15s}
+  .btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:var(--accent2)}
+  .btn-sm{padding:4px 10px;font-size:12px}
+  .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text-dim)}.btn-outline:hover{border-color:var(--accent);color:var(--text)}
+  .btn-docqa{background:var(--purple);color:#fff}.btn-docqa:hover{background:#8b6ff0}
+  .btn-danger{background:var(--red);color:#fff}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .main{display:flex;flex:1;overflow:hidden}
+  .sidebar{width:280px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+  .sidebar-section{padding:12px;border-bottom:1px solid var(--border)}
+  .sidebar-section h3{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+  .session-item{padding:8px 10px;border-radius:6px;cursor:pointer;font-size:13px;margin-bottom:4px;transition:background .15s;display:flex;align-items:center;justify-content:space-between}
+  .session-item:hover{background:var(--surface2)}.session-item.active{background:var(--accent);color:#fff}
+  .session-item .meta{font-size:11px;color:var(--text-dim);margin-top:2px}.session-item.active .meta{color:rgba(255,255,255,.7)}
+  .session-item .del-btn{background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;opacity:0;padding:2px 6px}.session-item:hover .del-btn{opacity:.7}
+  .session-list,.doc-list{overflow-y:auto;flex:1}
+  .doc-item{padding:5px 10px;border-radius:4px;font-size:12px;margin-bottom:2px;color:var(--text-dim);display:flex;align-items:center;gap:6px}
+  .chat-panel{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  .chat-header{padding:10px 20px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .mode-badge{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600}
+  .mode-badge.rag{background:#1e3a5f;color:var(--blue)}.mode-badge.docqa{background:#2d1b4e;color:var(--purple)}
+  .engine-badge{font-size:11px;padding:3px 8px;border-radius:4px;background:var(--surface2);color:var(--text-dim)}
+  .chat-messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
+  .message{max-width:85%;padding:12px 16px;border-radius:12px;font-size:14px;line-height:1.6;word-wrap:break-word}
+  .message.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+  .message.assistant{align-self:flex-start;background:var(--surface2);border-bottom-left-radius:4px}
+  .message.system{align-self:center;background:transparent;color:var(--text-dim);font-size:12px;font-style:italic;text-align:center}
+  .confidence-badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:4px;margin-top:8px;font-weight:600}
+  .confidence-badge.high{background:#064e3b;color:var(--green)}.confidence-badge.medium{background:#451a03;color:var(--amber)}.confidence-badge.low{background:#450a0a;color:var(--red)}
+  .sources{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+  .source-card{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface);border-radius:6px;margin-top:4px;font-size:12px;justify-content:space-between}
+  .source-card .left{display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow:hidden}
+  .source-card .left span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sources-hdr{margin:.6rem 0 .3rem;font-weight:600;color:var(--text-dim)}
+  .src-primary{font-weight:600}
+  .src-secondary{color:var(--text-dim);font-size:.85rem}
+  .src-actions{display:flex;gap:.5rem;align-items:center}
+  .dl-link{color:var(--blue);text-decoration:none;font-size:.85rem;padding:.25rem .5rem;border:1px solid var(--blue);border-radius:4px}
+  .dl-link:hover{background:var(--blue);color:#fff}
+  .clarify-box{background:#332d0b;border:1px solid #b58900;border-radius:6px;padding:.8rem;margin:.5rem 0;color:#f1d78f}
+  .clarify-box .btn{margin-right:.4rem;margin-top:.4rem}
+  .follow-ups{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .follow-up-chip{padding:5px 12px;background:var(--surface);border:1px solid var(--border);border-radius:20px;font-size:12px;cursor:pointer;color:var(--text-dim);transition:all .15s}
+  .follow-up-chip:hover{border-color:var(--accent);color:var(--text)}
+  .switch-prompt{margin-top:10px;padding:10px;background:#2d1b4e;border-radius:8px;border:1px solid var(--purple)}
+  .switch-prompt p{font-size:13px;color:var(--purple);margin-bottom:8px}
+  .chat-input-area{padding:12px 20px;background:var(--surface);border-top:1px solid var(--border)}
+  .input-row{display:flex;gap:8px;align-items:center}
+  .chat-input{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:8px;font-size:14px;outline:none}
+  .chat-input:focus{border-color:var(--accent)}
+  .input-options{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
+  .input-options label{font-size:12px;color:var(--text-dim)}
+  .input-options select{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:3px 8px;border-radius:4px;font-size:12px}
+  .right-panel{width:340px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+  .panel-header{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);padding:12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+  .api-log{flex:1;overflow-y:auto;padding:8px;font-family:'Cascadia Code','Fira Code',monospace;font-size:12px}
+  .log-entry{padding:6px 8px;border-radius:4px;margin-bottom:4px;border-left:3px solid var(--border)}
+  .log-entry.get{border-left-color:var(--green)}.log-entry.post{border-left-color:var(--blue)}.log-entry.delete{border-left-color:var(--red)}.log-entry.sse{border-left-color:var(--accent)}
+  .log-entry .method{font-weight:700;font-size:10px;margin-right:4px}
+  .log-entry .method.get{color:var(--green)}.log-entry .method.post{color:var(--blue)}.log-entry .method.delete{color:var(--red)}
+  .log-entry .path{color:var(--text)}.log-entry .status{float:right;font-size:11px}.log-entry .status.ok{color:var(--green)}.log-entry .status.err{color:var(--red)}
+  .log-entry .body{color:var(--text-dim);font-size:11px;margin-top:3px;white-space:pre-wrap;word-break:break-all;max-height:60px;overflow:hidden}
+  .log-entry .timing{color:var(--text-dim);font-size:10px;float:right}
+  .step-badge{display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:var(--accent);color:#fff;margin-right:4px;font-weight:700}
+  .typing-indicator{display:flex;gap:4px;padding:8px 0}
+  .typing-indicator span{width:8px;height:8px;background:var(--text-dim);border-radius:50%;animation:bounce 1.2s infinite}
+  .typing-indicator span:nth-child(2){animation-delay:.2s}.typing-indicator span:nth-child(3){animation-delay:.4s}
+  @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
+  ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  .warn-banner{background:#451a03;color:var(--amber);padding:8px 16px;font-size:12px;display:none;align-items:center;gap:8px;border-bottom:1px solid var(--amber)}.warn-banner.visible{display:flex}
+</style>
+</head>
+<body>
+
+<div class="warn-banner" id="corsBanner">
+  <strong>CORS:</strong> Serve via HTTP: <code>python -m http.server 4200</code> then open <code>http://localhost:4200/demo-ui.html</code>
+</div>
+
+<div class="top-bar">
+  <div class="health-dot" id="healthDot"></div>
+  <h1>RAG + DocQA Agent</h1>
+  <span class="health-label" id="healthLabel">Checking...</span>
+  <div class="config-group">
+    <label>Base URL:</label>
+    <input type="text" id="baseUrl" value="http://54.197.189.113:8001" style="width:260px" />
+    <label>Project:</label>
+    <input type="number" id="projectId" value="2361" style="width:70px" />
+    <button class="btn btn-primary" onclick="initProject()">Start Session</button>
+    <button class="btn btn-outline btn-sm" onclick="checkHealth()">Test</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <h3>Sessions <button class="btn btn-outline btn-sm" onclick="loadSessions()">Refresh</button></h3>
+      <button class="btn btn-primary btn-sm" onclick="initProject()" style="width:100%;margin-bottom:8px">+ New Session</button>
+      <div class="session-list" id="sessionList"><div style="color:var(--text-dim);font-size:12px;padding:8px">Click "Start Session"</div></div>
+    </div>
+    <div class="sidebar-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+      <h3>Sources <span id="docCount" style="font-size:11px;color:var(--text-dim);font-weight:400">0</span></h3>
+      <div class="doc-list" id="docList"></div>
+    </div>
+  </div>
+
+  <div class="chat-panel">
+    <div class="chat-header">
+      <span style="font-size:13px;color:var(--text-dim)" id="sessionLabel">No active session</span>
+      <span class="mode-badge rag" id="modeBadge">RAG Mode</span>
+      <span class="engine-badge" id="engineBadge" style="display:none"></span>
+      <button class="btn btn-outline btn-sm" id="backToRagBtn" style="display:none" onclick="switchToRag()">Back to Project Search</button>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="message system">Welcome! Set Base URL to your Sandbox API, then click "Start Session".</div>
+    </div>
+    <div class="chat-input-area">
+      <div class="input-row">
+        <input class="chat-input" id="chatInput" placeholder="Ask a question..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendQuery()}" />
+        <button class="btn btn-primary" onclick="sendQuery()" id="sendBtn">Send</button>
+      </div>
+      <div class="input-options">
+        <label>Mode:</label>
+        <select id="searchMode">
+          <option value="">Auto (Agentic-first)</option>
+          <option value="web">Web Only</option>
+          <option value="hybrid">Hybrid</option>
+        </select>
+        <label style="margin-left:10px">Source:</label>
+        <select id="sourceFilter">
+          <option value="">All</option>
+          <option value="drawing">Drawings</option>
+          <option value="specification">Specs</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="panel-header">API Log <button class="btn btn-outline btn-sm" onclick="clearLog()">Clear</button></div>
+    <div class="api-log" id="apiLog"></div>
+  </div>
+</div>
+
+<script>
+// ═══ STATE ═══
+let state = { projectId:2361, sessionId:null, activeAgent:'rag', selectedDoc:null, discoveredSources:new Map(), lastQuery:null };
+function getBase(){ return document.getElementById('baseUrl').value.trim().replace(/\/+$/,'') }
+if(window.location.protocol==='file:') document.getElementById('corsBanner').classList.add('visible');
+
+// ═══ LOGGER ═══
+let logStep=0;
+function logApi(m,p,b,l){logStep++;const log=document.getElementById('apiLog'),e=document.createElement('div'),ml=m.toLowerCase();e.className=`log-entry ${ml}`;e.innerHTML=`<span class="step-badge">${l}</span><span class="method ${ml}">${m}</span><span class="path">${p}</span><span class="status" id="ls${logStep}">...</span><span class="timing" id="lt${logStep}"></span>${b?`<div class="body">${JSON.stringify(b,null,1)}</div>`:''}`;log.appendChild(e);log.scrollTop=log.scrollHeight;return logStep}
+function logResult(i,s,ms){const e=document.getElementById(`ls${i}`),t=document.getElementById(`lt${i}`);if(e){e.textContent=s;e.className=`status ${(typeof s==='number'&&s<400)?'ok':'err'}`}if(t&&ms)t.textContent=`${ms}ms`}
+function clearLog(){document.getElementById('apiLog').innerHTML='';logStep=0}
+
+// ═══ HTTP ═══
+async function api(method,path,body,label){
+  const id=logApi(method,path,body,label),start=Date.now(),opts={method,headers:{}};
+  if(method!=='GET')opts.headers['Content-Type']='application/json';
+  if(body)opts.body=JSON.stringify(body);
+  try{const res=await fetch(`${getBase()}${path}`,opts);logResult(id,res.status,Date.now()-start);const text=await res.text();let data;try{data=JSON.parse(text)}catch{data={raw:text}}return{ok:res.ok,status:res.status,data,_logId:id}}
+  catch(err){logResult(id,'ERR',Date.now()-start);return{ok:false,status:0,data:{error:err.message},_logId:id}}
+}
+
+// ═══ CHAT HELPERS ═══
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function addMessage(role,content,extras){
+  const c=document.getElementById('chatMessages'),div=document.createElement('div');div.className=`message ${role}`;
+  let html=esc(content).replace(/\n/g,'<br>');
+  if(extras){
+    if(extras.confidence){html+=`<br><span class="confidence-badge ${extras.confidence}">${extras.confidence.toUpperCase()}${extras.confidence_score?` (${(extras.confidence_score*100).toFixed(0)}%)`:''}  </span>`}
+    if(extras.source_documents?.length){
+      // Dedupe by s3_path (fallback to file_name)
+      const seen=new Map();
+      extras.source_documents.forEach(s=>{
+        const key=s.s3_path||s.file_name||JSON.stringify(s);
+        if(!key)return;
+        if(!seen.has(key)){seen.set(key,{...s,_pages:new Set()})}
+        if(s.page)seen.get(key)._pages.add(s.page);
+      });
+      html+=`<div class="sources"><div class="sources-hdr">Sources:</div>`;
+      for(const s of seen.values()){
+        const basename=s.file_name||(s.s3_path||'').split('/').pop()||'Document';
+        const subtitle=(s.display_title&&s.display_title!==basename)?s.display_title:'';
+        const pages=Array.from(s._pages||[]).sort((a,b)=>a-b);
+        const pagesLabel=pages.length?` &middot; pages ${pages.join(', ')}`:(s.page?` (p${s.page})`:'');
+        const dlLink=s.download_url?`<a href="${esc(s.download_url)}" target="_blank" rel="noopener" class="dl-link" title="Download PDF">&#8595; Download</a>`:'';
+        const srcEncoded=encodeURIComponent(JSON.stringify(s));
+        html+=`<div class="source-card"><div class="left"><span style="font-size:16px">&#128196;</span><div><div class="src-primary" title="${esc(s.s3_path||'')}">${esc(basename)}${pagesLabel}</div>${subtitle?`<div class="src-secondary">${esc(subtitle)}</div>`:''}</div></div><div class="src-actions">${dlLink}<button class="btn btn-docqa btn-sm" onclick="chatWithDocumentFull('${srcEncoded.replace(/'/g,"&#39;")}')">Chat with Document</button></div></div>`;
+      }
+      html+=`</div>`;
+      collectSources(extras.source_documents);
+    }
+    if(extras.follow_up_questions?.length){
+      html+=`<div class="follow-ups">`;
+      extras.follow_up_questions.forEach(q=>{html+=`<span class="follow-up-chip" onclick="fillQuery(this.textContent)">${esc(q)}</span>`});
+      html+=`</div>`;
+    }
+    if(extras.needs_clarification&&extras.clarification_prompt){
+      html+=`<div class="clarify-box"><p>${esc(extras.clarification_prompt)}</p><button class="btn btn-primary btn-sm" onclick="resubmitWithHint('docqa')">Answer from selected document</button><button class="btn btn-outline btn-sm" onclick="resubmitWithHint('rag')">Search whole project</button></div>`;
+    }
+    if(extras.suggest_switch==='rag'){
+      html+=`<div class="switch-prompt"><p>This question seems project-wide. Switch back to project search?</p><button class="btn btn-primary btn-sm" onclick="switchToRag()">Switch to Project Search</button> <button class="btn btn-outline btn-sm" onclick="fillQuery('${esc(extras.original_query||'')}')">Stay in Document</button></div>`;
+    }
+    if(extras.engine_used||extras.processing_time_ms){
+      html+=`<div style="font-size:11px;color:var(--text-dim);margin-top:6px">`;
+      if(extras.engine_used)html+=`Engine: ${extras.engine_used}`;
+      if(extras.fallback_used)html+=` (fallback)`;
+      if(extras.processing_time_ms)html+=` &middot; ${(extras.processing_time_ms/1000).toFixed(1)}s`;
+      html+=`</div>`;
+    }
+  }
+  div.innerHTML=html;c.appendChild(div);c.scrollTop=c.scrollHeight;return div;
+}
+function addSys(t){addMessage('system',t)}
+function showTyping(){const c=document.getElementById('chatMessages'),d=document.createElement('div');d.className='message assistant';d.id='typingMsg';d.innerHTML='<div class="typing-indicator"><span></span><span></span><span></span></div>';c.appendChild(d);c.scrollTop=c.scrollHeight}
+function removeTyping(){const e=document.getElementById('typingMsg');if(e)e.remove()}
+function fillQuery(t){document.getElementById('chatInput').value=t;document.getElementById('chatInput').focus()}
+function collectSources(docs){if(!docs)return;docs.forEach(s=>{const k=s.s3_path||s.file_name||s.display_title;if(k&&!state.discoveredSources.has(k))state.discoveredSources.set(k,s)});renderSources()}
+function renderSources(){const list=document.getElementById('docList');document.getElementById('docCount').textContent=state.discoveredSources.size;list.innerHTML='';state.discoveredSources.forEach((s,title)=>{const d=document.createElement('div');d.className='doc-item';d.innerHTML=`<span style="font-size:14px">&#128196;</span> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(s.s3_path||title)}">${esc(title)}</span>`;list.appendChild(d)})}
+
+function updateModeUI(){
+  const badge=document.getElementById('modeBadge'),btn=document.getElementById('backToRagBtn');
+  if(state.activeAgent==='docqa'){badge.textContent='DocQA Mode';badge.className='mode-badge docqa';btn.style.display='inline-block';document.getElementById('chatInput').placeholder='Ask about the selected document...'}
+  else{badge.textContent='RAG Mode';badge.className='mode-badge rag';btn.style.display='none';document.getElementById('chatInput').placeholder='Ask a question about your project...'}
+}
+
+// ═══ HEALTH ═══
+async function checkHealth(){
+  const dot=document.getElementById('healthDot'),label=document.getElementById('healthLabel');
+  dot.classList.remove('ok');label.textContent='Checking...';
+  const[h,i]=await Promise.all([api('GET','/health',null,'Boot'),api('GET','/',null,'Boot')]);
+  if(h.ok&&h.data.status==='healthy'){dot.classList.add('ok');const ag=h.data.engines?.agentic?.initialized?'ON':'OFF';label.textContent=`Healthy | Agentic: ${ag}`}
+  else if(h.status===0){label.textContent='UNREACHABLE';addSys('Cannot reach API. Check Base URL and CORS.')}
+  else{label.textContent=`Error (${h.status})`}
+}
+
+// ═══ SESSION ═══
+async function initProject(){
+  const pid=parseInt(document.getElementById('projectId').value);if(!pid)return alert('Enter Project ID');
+  state.projectId=pid;state.activeAgent='rag';state.selectedDoc=null;updateModeUI();
+  addSys(`Creating session for project ${pid}...`);
+  const r=await api('POST','/sessions/create',{project_id:pid},'Session');
+  if(r.ok&&r.data.session_id){state.sessionId=r.data.session_id;document.getElementById('sessionLabel').textContent=`Session: ${state.sessionId}`;addSys(`Session ready: ${state.sessionId}`);state.discoveredSources.clear();renderSources();await loadSessions()}
+  else{addSys(`Failed: ${JSON.stringify(r.data)}`)}
+}
+
+// ═══ QUERY ═══
+async function sendQuery(){
+  const input=document.getElementById('chatInput'),query=input.value.trim();if(!query)return;if(!state.sessionId)return alert('Start session first');
+  input.value='';addMessage('user',query);
+  const body={query,project_id:state.projectId,session_id:state.sessionId};
+  const mode=document.getElementById('searchMode').value;if(mode)body.search_mode=mode;
+  const filter=document.getElementById('sourceFilter').value;if(filter)body.filter_source_type=filter;
+
+  // If in DocQA mode, route through docqa
+  if(state.activeAgent==='docqa'){body.search_mode='docqa'}
+  if(state.activeAgent==='docqa'&&state.selectedDoc){body.docqa_document=state.selectedDoc}
+  state.lastQuery=query;
+
+  showTyping();document.getElementById('sendBtn').disabled=true;
+  const r=await api('POST','/query',body,'Query');
+  removeTyping();document.getElementById('sendBtn').disabled=false;
+
+  if(r.ok&&r.data){
+    const d=r.data;
+    if(d.error&&!d.answer){addMessage('assistant',`Error: ${d.error}`);return}
+    addMessage('assistant',d.answer||'No answer received.',{
+      confidence:d.confidence,confidence_score:d.confidence_score,
+      source_documents:d.source_documents,web_sources:d.web_sources,
+      follow_up_questions:d.follow_up_questions,
+      engine_used:d.engine_used,fallback_used:d.fallback_used,
+      processing_time_ms:d.processing_time_ms,
+      suggest_switch:d.suggest_switch,original_query:query,
+      needs_clarification:d.needs_clarification,clarification_prompt:d.clarification_prompt,
+    });
+    // Update agent mode from response
+    if(d.active_agent){state.activeAgent=d.active_agent;updateModeUI()}
+    if(d.engine_used){const b=document.getElementById('engineBadge');b.textContent=d.engine_used;b.style.display='inline-block'}
+  }else{addMessage('assistant',`Error: ${r.data?.detail||r.data?.error||r.status}`)}
+}
+
+// ═══ DOCQA: Chat with Document ═══
+async function chatWithDocument(s3Path,displayTitle){
+  if(!state.sessionId)return alert('Start session first');
+  addSys(`Processing document: ${displayTitle}...`);
+  state.activeAgent='docqa';state.selectedDoc={s3_path:s3Path,file_name:displayTitle};updateModeUI();
+
+  showTyping();document.getElementById('sendBtn').disabled=true;
+  const r=await api('POST','/query',{
+    query:`I want to explore this document in detail. Give me a brief summary of what it contains.`,
+    project_id:state.projectId,
+    session_id:state.sessionId,
+    search_mode:'docqa',
+    docqa_document:{s3_path:s3Path,file_name:s3Path.split('/').pop()},
+  },'DocQA');
+  removeTyping();document.getElementById('sendBtn').disabled=false;
+
+  if(r.ok&&r.data){
+    const d=r.data;
+    if(d.error){addMessage('assistant',`Error: ${d.error}`);state.activeAgent='rag';updateModeUI();return}
+    addMessage('assistant',d.answer||'Document processed. You can now ask questions.',{
+      confidence:d.confidence,confidence_score:d.confidence_score,
+      source_documents:d.source_documents,
+      follow_up_questions:d.follow_up_questions,
+      engine_used:d.engine_used,processing_time_ms:d.processing_time_ms,
+    });
+    if(d.active_agent)state.activeAgent=d.active_agent;
+    updateModeUI();
+  }else{addMessage('assistant',`Error: ${r.data?.detail||r.data?.error||r.status}`);state.activeAgent='rag';updateModeUI()}
+}
+
+// ═══ DocQA: Chat with Document (full source object) ═══
+async function chatWithDocumentFull(srcEncoded){
+  if(!state.sessionId)return alert('Start session first');
+  let src;
+  try{src=JSON.parse(decodeURIComponent(srcEncoded))}
+  catch(e){console.error('bad src payload',e);return}
+  const basename=src.file_name||(src.s3_path||'').split('/').pop()||'Document';
+  state.activeAgent='docqa';
+  state.selectedDoc={
+    s3_path:src.s3_path||'',
+    file_name:basename,
+    download_url:src.download_url||null,
+    pdf_name:src.pdf_name||basename,
+    display_title:src.display_title||basename,
+  };
+  updateModeUI();
+  addSys(`Processing ${basename}...`);
+  showTyping();document.getElementById('sendBtn').disabled=true;
+  const r=await api('POST','/query',{
+    query:'Give me a brief overview of this document.',
+    project_id:state.projectId,
+    session_id:state.sessionId,
+    search_mode:'docqa',
+    docqa_document:state.selectedDoc,
+  },'DocQA');
+  removeTyping();document.getElementById('sendBtn').disabled=false;
+  if(r.ok&&r.data){
+    const d=r.data;
+    if(d.session_id)state.sessionId=d.session_id;
+    if(d.error&&!d.answer){addSys(`Could not load document: ${d.error}`);state.activeAgent='rag';state.selectedDoc=null;updateModeUI();return}
+    addSys('Document processed. You can now ask questions.');
+    addMessage('assistant',d.answer||'Document processed. You can now ask questions.',{
+      confidence:d.confidence,confidence_score:d.confidence_score,
+      source_documents:d.source_documents,follow_up_questions:d.follow_up_questions,
+      engine_used:d.engine_used,processing_time_ms:d.processing_time_ms,
+      needs_clarification:d.needs_clarification,clarification_prompt:d.clarification_prompt,
+    });
+    if(d.active_agent)state.activeAgent=d.active_agent;
+    updateModeUI();
+  }else{addSys(`Network error loading document: ${r.data?.error||r.status}`);state.activeAgent='rag';state.selectedDoc=null;updateModeUI()}
+}
+
+// ═══ Resubmit with clarification hint ═══
+async function resubmitWithHint(modeHint){
+  if(!state.lastQuery)return;
+  document.querySelectorAll('.clarify-box').forEach(n=>n.remove());
+  const body={
+    query:state.lastQuery,
+    project_id:state.projectId,
+    session_id:state.sessionId,
+    mode_hint:modeHint,
+  };
+  if(modeHint==='docqa'&&state.selectedDoc){body.search_mode='docqa';body.docqa_document=state.selectedDoc}
+  showTyping();document.getElementById('sendBtn').disabled=true;
+  const r=await api('POST','/query',body,'Clarify');
+  removeTyping();document.getElementById('sendBtn').disabled=false;
+  if(r.ok&&r.data){
+    const d=r.data;
+    if(d.session_id)state.sessionId=d.session_id;
+    if(d.active_agent){state.activeAgent=d.active_agent;updateModeUI()}
+    addMessage('assistant',d.answer||'No answer received.',{
+      confidence:d.confidence,confidence_score:d.confidence_score,
+      source_documents:d.source_documents,follow_up_questions:d.follow_up_questions,
+      engine_used:d.engine_used,processing_time_ms:d.processing_time_ms,
+      needs_clarification:d.needs_clarification,clarification_prompt:d.clarification_prompt,
+    });
+  }else{addMessage('assistant',`Error: ${r.data?.detail||r.data?.error||r.status}`)}
+}
+
+// ═══ Switch back to RAG ═══
+function switchToRag(){state.activeAgent='rag';state.selectedDoc=null;updateModeUI();addSys('Switched back to Project Search mode.')}
+
+// ═══ SESSIONS ═══
+async function loadSessions(){
+  const r=await api('GET','/sessions',null,'List');if(!r.ok)return;
+  const list=document.getElementById('sessionList');list.innerHTML='';
+  const sessions=r.data.sessions||[];if(!sessions.length){list.innerHTML='<div style="color:var(--text-dim);font-size:12px;padding:8px">No sessions.</div>';return}
+  sessions.forEach(s=>{const div=document.createElement('div');div.className=`session-item ${s.session_id===state.sessionId?'active':''}`;
+    div.innerHTML=`<div style="flex:1;min-width:0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.session_id)}</div><div class="meta">${s.message_count||0} msgs &middot; P${s.project_id||'?'}</div></div><button class="del-btn" onclick="event.stopPropagation();deleteSession('${s.session_id}')">&times;</button>`;
+    div.onclick=()=>switchSession(s.session_id);list.appendChild(div)})
+}
+async function switchSession(sid){
+  state.sessionId=sid;state.activeAgent='rag';state.selectedDoc=null;updateModeUI();
+  document.getElementById('sessionLabel').textContent=`Session: ${sid}`;
+  document.getElementById('chatMessages').innerHTML='';addSys(`Loading session ${sid}...`);
+  const r=await api('GET',`/sessions/${sid}/conversation`,null,'History');
+  if(r.ok&&r.data.conversation){r.data.conversation.forEach(m=>{addMessage(m.role==='user'?'user':m.role==='assistant'?'assistant':'system',m.content)});addSys(`Loaded ${r.data.conversation.length} messages.`)}
+  await loadSessions()
+}
+async function deleteSession(sid){if(!confirm(`Delete ${sid}?`))return;await api('DELETE',`/sessions/${sid}`,null,'Delete');if(state.sessionId===sid){state.sessionId=null;document.getElementById('sessionLabel').textContent='No session';document.getElementById('chatMessages').innerHTML='';addSys('Deleted.')}await loadSessions()}
+
+// ═══ BOOT ═══
+checkHealth();
+</script>
+</body>
+</html>

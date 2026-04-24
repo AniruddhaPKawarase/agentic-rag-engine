@@ -27,6 +27,7 @@ AGENT_TEMPERATURE = float(os.getenv("AGENT_TEMPERATURE", "0.1"))
 # ── MongoDB ────────────────────────────────────────────────────────────
 MONGODB_URI = _require_env("MONGODB_URI")
 MONGO_DB = os.getenv("MONGO_DB", "iField")
+VISION_COLLECTION = os.getenv("VISION_COLLECTION", "drawingVision")
 
 # ── API ────────────────────────────────────────────────────────────────
 API_HOST = os.getenv("API_HOST", "127.0.0.1")
