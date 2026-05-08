@@ -59,8 +59,15 @@ def reconstruct_drawing_text(
         if not text:
             continue
 
-        page = frag.get("page", 0)
-        y = frag.get("y", 0)
+        # Some legacy fragments have null page/y/x. Coerce to 0 so the
+        # reconstructor never sees None and arithmetic stays safe. Treat
+        # null-y as "stay on current line" rather than starting a new one.
+        page_raw = frag.get("page")
+        page = int(page_raw) if isinstance(page_raw, (int, float)) else 0
+        y_raw = frag.get("y")
+        y = float(y_raw) if isinstance(y_raw, (int, float)) else (
+            current_y if current_y is not None else 0.0
+        )
 
         # New page = new line
         if page != current_page:
@@ -71,8 +78,12 @@ def reconstruct_drawing_text(
             current_page = page
             continue
 
-        # Same line if y-distance is small
-        if abs(y - current_y) <= LINE_MERGE_THRESHOLD:
+        # Same line if y-distance is small. current_y can be None on the
+        # very first fragment of a session — treat that as "start a line".
+        if current_y is None:
+            current_line.append(frag)
+            current_y = y
+        elif abs(y - current_y) <= LINE_MERGE_THRESHOLD:
             current_line.append(frag)
         else:
             if current_line:

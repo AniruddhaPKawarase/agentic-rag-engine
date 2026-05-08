@@ -1,13 +1,53 @@
-__pycache__/
-*.pyc
+# --- Secrets ---
 .env
-*.bin
-*.faiss
-index/
-generated_docs/
-*.mp4
-*.log
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.eggs/
+dist/
+build/
 .pytest_cache/
-*.docx
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# --- venv ---
+.venv/
 venv/
-archive/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- v3.1 runtime artifacts ---
+# Production conversation logs — never commit
+conversation_sessions/
+agent.log
+*.log
+
+# --- backups (legacy) ---
+_backups/
+*.bak
+*.bak.*
+
+# --- Notebooks ---
+*.ipynb_checkpoints/

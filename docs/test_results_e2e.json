@@ -1,0 +1,366 @@
+{
+  "test_suite": "Unified RAG Agent - E2E Tests",
+  "environment": {
+    "target": "Sandbox VM",
+    "base_url": "http://54.197.189.113:8001",
+    "date": "2026-04-15",
+    "runner": "curl/bash"
+  },
+  "summary": {
+    "total_tests": 8,
+    "passed": 8,
+    "failed": 0,
+    "pass_rate": "100%",
+    "total_latency_ms": 24028.66,
+    "avg_latency_ms": 3003.58,
+    "min_latency_ms": 569.91,
+    "max_latency_ms": 11656.09
+  },
+  "results": [
+    {
+      "test_id": "E2E-001",
+      "endpoint": "/health",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 581.69,
+      "passed": true,
+      "response_body": {
+        "status": "healthy",
+        "engines": {
+          "agentic": {
+            "initialized": true
+          },
+          "traditional": {
+            "faiss_loaded": false
+          }
+        },
+        "fallback_enabled": true
+      }
+    },
+    {
+      "test_id": "E2E-002",
+      "endpoint": "/config",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 599.93,
+      "passed": true,
+      "response_body": {
+        "host": "0.0.0.0",
+        "port": 8001,
+        "log_level": "INFO",
+        "agentic_model": "gpt-4.1",
+        "agentic_model_fallback": "gpt-4.1-mini",
+        "agentic_max_steps": 8,
+        "traditional_model": "gpt-4o",
+        "traditional_embedding_model": "text-embedding-3-small",
+        "fallback_enabled": true,
+        "fallback_timeout_seconds": 30,
+        "faiss_lazy_load": true,
+        "storage_backend": "s3",
+        "mongo_db": "iField"
+      }
+    },
+    {
+      "test_id": "E2E-003",
+      "endpoint": "/",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 583.86,
+      "passed": true,
+      "response_body": {
+        "service": "Unified RAG Agent",
+        "version": "1.0.0",
+        "engines": [
+          "agentic",
+          "traditional"
+        ],
+        "endpoints": {
+          "query": "POST /query",
+          "stream": "POST /query/stream",
+          "quick_query": "POST /quick-query",
+          "web_search": "POST /web-search",
+          "health": "GET /health",
+          "config": "GET /config",
+          "sessions": "GET /sessions"
+        }
+      }
+    },
+    {
+      "test_id": "E2E-004",
+      "endpoint": "/query",
+      "method": "POST",
+      "request_body": {
+        "query": "What HVAC equipment is specified?",
+        "project_id": 7222
+      },
+      "status_code": 200,
+      "latency_ms": 9458.65,
+      "passed": true,
+      "response_body": {
+        "query": "",
+        "answer": "The HVAC equipment specified for this project includes:\n\n1. Variable Refrigerant Flow (VRF) HVAC Systems\n2. Dedicated Outdoor Air Units\n3. Direct Digital Control System for HVAC\n\nThese are the main categories of HVAC equipment identified in the project specifications. However, the retrieved sections did not contain detailed text content, so specific manufacturer names, model numbers, or performance criteria are not available from the current data.\n\nSupporting details:\n- \"Variable-Refrigerant-Flow-HVAC-Systems\" is listed as a dedicated specification section.\n- \"Dedicated-Outdoor-Air-Units\" are also specified in a separate section.\n- \"Direct-Digital-Control-System-for-HVAC\" is included as a control system for the HVAC equipment.\n\n[Source: 0212202509232301238129-Variable-Refrigerant-Flow-HVAC-Systems_Rev_01-1]\n[Source: 0212202509231771237433-Dedicated-Outdoor-Air-Units_Rev_01-1]\n[Source: 0212202509222380230923-Direct-Digital-Control-System-for-HVAC_Rev_07-1]\n\nIf you need detailed technical requirements or product lists, please specify which equipment you want more information about.",
+        "rag_answer": "The HVAC equipment specified for this project includes:\n\n1. Variable Refrigerant Flow (VRF) HVAC Systems\n2. Dedicated Outdoor Air Units\n3. Direct Digital Control System for HVAC\n\nThese are the main categories of HVAC equipment identified in the project specifications.",
+        "web_answer": null,
+        "retrieval_count": 10,
+        "average_score": 0.9,
+        "confidence": "high",
+        "confidence_score": 0.9,
+        "is_clarification": false,
+        "follow_up_questions": [
+          "What are the technical requirements for the Variable Refrigerant Flow HVAC systems?",
+          "Are there specific manufacturers or models listed for the Dedicated Outdoor Air Units?",
+          "What are the control and monitoring features specified for the Direct Digital Control System?"
+        ],
+        "improved_queries": [],
+        "query_tips": [],
+        "model_used": "gpt-4.1",
+        "token_usage": {
+          "total_tokens": 0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0
+        },
+        "token_tracking": null,
+        "s3_paths": [],
+        "s3_path_count": 0,
+        "source_documents": [
+          {
+            "s3_path": "",
+            "file_name": "0212202508483466000110-Table-of-Contents_Rev_14-1",
+            "display_title": "",
+            "download_url": null,
+            "pdf_name": "0212202508483466000110-Table-of-Contents_Rev_14-1",
+            "drawing_name": "",
+            "drawing_title": "",
+            "page": 1
+          },
+          {
+            "s3_path": "",
+            "file_name": "0212202509215084230548-Vibration-and-Seismic-Controls-for-HVAC_Rev_01-1",
+            "display_title": "",
+            "download_url": null,
+            "pdf_name": "0212202509215084230548-Vibration-and-Seismic-Controls-for-HVAC_Rev_01-1",
+            "drawing_name": "",
+            "drawing_title": "",
+            "page": 1
+          },
+          {
+            "s3_path": "",
+            "file_name": "0212202509221446230800-Commissioning-of-HVAC_Rev_04-1",
+            "display_title": "",
+            "download_url": null,
+            "pdf_name": "0212202509221446230800-Commissioning-of-HVAC_Rev_04-1",
+            "drawing_name": "",
+            "drawing_title": "",
+            "page": 1
+          },
+          {
+            "s3_path": "",
+            "file_name": "0212202509232301238129-Variable-Refrigerant-Flow-HVAC-Systems_Rev_01-1",
+            "display_title": "",
+            "download_url": null,
+            "pdf_name": "0212202509232301238129-Variable-Refrigerant-Flow-HVAC-Systems_Rev_01-1",
+            "drawing_name": "",
+            "drawing_title": "",
+            "page": 1
+          },
+          {
+            "s3_path": "",
+            "file_name": "0212202509221166230800-Commissioning-of-HVAC_Rev_01-1",
+            "display_title": "",
+            "download_url": null,
+            "pdf_name": "0212202509221166230800-Commissioning-of-HVAC_Rev_01-1",
+            "drawing_name": "",
+            "drawing_title": "",
+            "page": 1
+          },
+          {
+            "s3_path": "",
+            "file_name": "0212202509212965230130.51-HVAC-Air-Distribution-System-Cleaning_Rev_02-1",
+            "display_title": "",
+            "download_url": null,
+            "pdf_name": "0212202509212965230130.51-HVAC-Air-Distribution-System-Cleaning_Rev_02-1",
+            "drawing_name": "",
+            "drawing_title": "",
+            "page": 1
+          },
+          {
+            "s3_path": "",
+            "file_name": "0212202509231771237433-Dedicated-Outdoor-Air-Units_Rev_01-1",
+            "display_title": "",
+            "download_url": null,
+            "pdf_name": "0212202509231771237433-Dedicated-Outdoor-Air-Units_Rev_01-1",
+            "drawing_name": "",
+            "drawing_title": "",
+            "page": 1
+          },
+          {
+            "s3_path": "",
+            "file_name": "0212202509212900230130.51-HVAC-Air-Distribution-System-Cleaning_Rev_01-1",
+            "display_title": "",
+            "download_url": null,
+            "pdf_name": "0212202509212900230130.51-HVAC-Air-Distribution-System-Cleaning_Rev_01-1",
+            "drawing_name": "",
+            "drawing_title": "",
+            "page": 1
+          },
+          {
+            "s3_path": "",
+            "file_name": "0212202508563324017900-Demonstration-and-Training_Rev_02-1",
+            "display_title": "",
+            "download_url": null,
+            "pdf_name": "0212202508563324017900-Demonstration-and-Training_Rev_02-1",
+            "drawing_name": "",
+            "drawing_title": "",
+            "page": 1
+          },
+          {
+            "s3_path": "",
+            "file_name": "0212202509222380230923-Direct-Digital-Control-System-for-HVAC_Rev_07-1",
+            "display_title": "",
+            "download_url": null,
+            "pdf_name": "0212202509222380230923-Direct-Digital-Control-System-for-HVAC_Rev_07-1",
+            "drawing_name": "",
+            "drawing_title": "",
+            "page": 1
+          }
+        ],
+        "retrieved_chunks": [],
+        "debug_info": {
+          "agentic_steps": 5,
+          "agentic_cost_usd": 0.0
+        },
+        "processing_time_ms": 8793,
+        "project_id": null,
+        "session_id": null,
+        "session_stats": null,
+        "search_mode": "agentic",
+        "web_sources": [],
+        "web_source_count": 0,
+        "pin_status": null,
+        "needs_document_selection": false,
+        "available_documents": [],
+        "scoped_to": null,
+        "success": true,
+        "engine_used": "agentic",
+        "fallback_used": false,
+        "agentic_confidence": "high",
+        "error": null
+      }
+    },
+    {
+      "test_id": "E2E-005",
+      "endpoint": "/quick-query",
+      "method": "POST",
+      "request_body": {
+        "query": "List electrical drawings",
+        "project_id": 7222
+      },
+      "status_code": 200,
+      "latency_ms": 11656.09,
+      "passed": true,
+      "response_body": {
+        "answer": "Here is a list of electrical drawings available for Project ID 7222:\n\n1. 2511202514150660JRpkwyHotelMechPlans16-1\n2. 2511202514345542JRPkwyHotelPlumbingPlans14-1\n3. 2511202514134864JRpkwyHotelMechPlans3-1\n4. 2511202514142465JRpkwyHotelMechPlans9-1\n5. 2511202514161408JRpkwyHotelMechPlans30-1\n6. 2511202514154205JRpkwyHotelMechPlans23-1\n7. 2511202514161079JRpkwyHotelMechPlans29-1\n8. 2511202514150037JRpkwyHotelMechPlans15-1\n9. 2511202514162291JRpkwyHotelMechPlans32-1\n10. 2511202514153371JRpkwyHotelMechPlans21-1\n11. 2511202514345102JRPkwyHotelPlumbingPlans13-1\n12. 2511202514152933JRpkwyHotelMechPlans20-1\n13. 2511202514160130JRpkwyHotelMechPlans27-1\n14. 2511202514161850JRpkwyHotelMechPlans31-1\n15. 2511202514133993JRpkwyHotelMechPlans1-1\n16. 2511202514353995JRPkwyHotelPlumbingPlans23-1\n17. 2511202514144137JRpkwyHotelMechPlans12-1\n18. 2511202514163318JRpkwyHotelMechPlans34-1\n19. 2511202514141337JRpkwyHotelMechPlans7-1\n20. 2511202514335657JRPkwyHotelPlumbingPlans4-1\n\nThese drawings are categorized under the Electrical trade for this project. If you need the content or details from any specific drawing, please specify which one.\n\n[Source: Electrical trade drawing list]",
+        "sources": [],
+        "confidence": "high",
+        "engine_used": "agentic"
+      }
+    },
+    {
+      "test_id": "E2E-006",
+      "endpoint": "/projects/7222/documents",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 569.91,
+      "passed": true,
+      "response_body_summary": {
+        "success": true,
+        "project_id": 7222,
+        "document_count": 2609,
+        "note": "Full response contains 2609 document entries (544 KB). Truncated for test results. Sample documents shown in source_documents_sample."
+      },
+      "source_documents_sample": [
+        {
+          "type": "drawing",
+          "drawing_title": "2511202514133993JRpkwyHotelMechPlans1-1",
+          "drawing_name": "",
+          "trade": "HVAC",
+          "pdf_name": "2511202514133993JRpkwyHotelMechPlans1-1",
+          "fragment_count": 8255
+        },
+        {
+          "type": "drawing",
+          "drawing_title": "- BASEMENT - SLAB - EDGE PLAN",
+          "drawing_name": "A001",
+          "trade": "Architecture",
+          "pdf_name": "2403202613584662A001BASEMENTSLABEDGEPLANRev01-1",
+          "fragment_count": 117
+        },
+        {
+          "type": "drawing",
+          "drawing_title": "- TELECOM DETAILS",
+          "drawing_name": "C  2020 S T S AI  . -",
+          "trade": "Electrical",
+          "pdf_name": "2403202616391441T5001LOWVOLTAGETELECOMDETAILSRev21-1",
+          "fragment_count": 163
+        },
+        {
+          "type": "drawing",
+          "drawing_title": "/TH FLOOR - OVERALL DIMENSION PLAN",
+          "drawing_name": "A1038",
+          "trade": "Architecture",
+          "pdf_name": "2403202614015473A108b7THFLOOROVERALLDIMENSIONPLANRev31-1",
+          "fragment_count": 104
+        },
+        {
+          "type": "drawing",
+          "drawing_title": "/TH FLOOR PLAN - ELECTRICAL",
+          "drawing_name": "1.07",
+          "trade": "Electrical",
+          "pdf_name": "2303202607403738E1077THFLOORPLANELECTRICALRev31-1",
+          "fragment_count": 634
+        }
+      ]
+    },
+    {
+      "test_id": "E2E-007",
+      "endpoint": "/debug-pipeline",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 569.91,
+      "passed": true,
+      "response_body": {
+        "orchestrator": {
+          "fallback_enabled": true,
+          "fallback_timeout": 30
+        },
+        "agentic": {
+          "initialized": true
+        },
+        "traditional": {
+          "faiss_loaded": false
+        },
+        "title_cache": {
+          "cached_projects": 1,
+          "max_projects": 100,
+          "ttl_seconds": 3600,
+          "project_ids": [
+            7222
+          ]
+        }
+      }
+    },
+    {
+      "test_id": "E2E-008",
+      "endpoint": "/admin/sessions",
+      "method": "GET",
+      "status_code": 200,
+      "latency_ms": 578.54,
+      "passed": true,
+      "response_body": {
+        "success": true,
+        "count": 0,
+        "sessions": []
+      }
+    }
+  ]
+}

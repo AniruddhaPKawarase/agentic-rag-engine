@@ -37,10 +37,35 @@ def validate_source_file(source_file: str) -> str:
     return source_file[:500]
 
 
-def validate_drawing_id(drawing_id: int) -> int:
-    """Validate drawing_id is a positive integer."""
-    if not isinstance(drawing_id, (int, float)):
-        raise ValueError(f"drawing_id must be an integer, got {type(drawing_id).__name__}")
+def validate_drawing_id(drawing_id) -> int:
+    """Validate drawing_id is a positive integer.
+
+    Accepts int, float, or numeric string (LLMs sometimes pass quoted IDs).
+    Raises ValueError with a clear, agent-readable message if the value is
+    None or unparseable — the agent's tool-error handler turns that into
+    a recoverable observation so the ReAct loop can try a different tool
+    instead of dying mid-step.
+    """
+    if drawing_id is None:
+        raise ValueError(
+            "drawing_id is required but was null. "
+            "Call legacy_list_drawings or legacy_search_text first to find "
+            "a valid drawing_id, then retry with that integer."
+        )
+    if isinstance(drawing_id, str):
+        s = drawing_id.strip()
+        if not s.isdigit():
+            raise ValueError(
+                f"drawing_id must be an integer, got string {drawing_id!r}. "
+                "Use legacy_list_drawings to discover the numeric drawing_id "
+                "for a sheet name like 'M-501'."
+            )
+        drawing_id = int(s)
+    elif not isinstance(drawing_id, (int, float)):
+        raise ValueError(
+            f"drawing_id must be an integer, got {type(drawing_id).__name__}. "
+            "Use legacy_list_drawings to discover the numeric drawing_id."
+        )
     drawing_id = int(drawing_id)
     if drawing_id <= 0:
         raise ValueError(f"drawing_id out of range: {drawing_id}")

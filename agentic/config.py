@@ -38,7 +38,7 @@ API_KEY = os.getenv("API_KEY", "")
 AGENT_MODEL_FALLBACK = os.getenv("AGENT_MODEL_FALLBACK", "gpt-4.1-mini")
 OPENAI_TIMEOUT_SECONDS = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "60"))
 OPENAI_MAX_RETRIES = int(os.getenv("OPENAI_MAX_RETRIES", "3"))
-MAX_AGENT_STEPS = int(os.getenv("MAX_AGENT_STEPS", "8"))
+MAX_AGENT_STEPS = int(os.getenv("MAX_AGENT_STEPS", "12"))
 MAX_CONTEXT_TOKENS = int(os.getenv("MAX_CONTEXT_TOKENS", "100000"))
 MAX_QUERY_LENGTH = int(os.getenv("MAX_QUERY_LENGTH", "2000"))
 

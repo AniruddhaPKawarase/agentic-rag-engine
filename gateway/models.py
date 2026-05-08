@@ -3,6 +3,11 @@ Gateway request / response models — Pydantic v2 BaseModel schemas.
 
 QueryRequest validates inbound queries.
 UnifiedResponse is the standardised envelope returned by the orchestrator.
+
+Phase 1 additions: fields needed for the DocQA bridge and to align the
+Pydantic model with the wire payload the orchestrator actually emits.
+All new fields are Optional with safe defaults — existing clients that
+do not know about these fields are unaffected (forward compatibility).
 """
 
 from __future__ import annotations
@@ -25,6 +30,9 @@ class QueryRequest(BaseModel):
     set_id: Optional[int] = None
     conversation_history: Optional[list] = None
     engine: Optional[str] = None
+    # --- Phase 1 additions (DocQA bridge) ---
+    docqa_document: Optional[dict] = None
+    mode_hint: Optional[str] = None  # "rag" | "docqa" | None (auto)
 
 
 class UnifiedResponse(BaseModel):
@@ -44,3 +52,11 @@ class UnifiedResponse(BaseModel):
     elapsed_ms: int = 0
     total_steps: int = 0
     model: str = ""
+    # --- Phase 1 additions (schema-aligned to wire truth + DocQA bridge) ---
+    source_documents: Optional[list[dict]] = None
+    active_agent: Optional[str] = "rag"
+    selected_document: Optional[dict] = None
+    clarification_prompt: Optional[str] = None
+    docqa_session_id: Optional[str] = None
+    groundedness_score: Optional[float] = None
+    flagged_claims: Optional[list[dict]] = None
