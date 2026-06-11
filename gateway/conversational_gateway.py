@@ -211,6 +211,12 @@ def detect(query: str) -> str | None:
     return None
 
 
+# multi-source modes return per-source answer keys (email_answer, sources_used…)
+# in their /query envelope — the CG response must mirror them or mode-specific
+# UI panels would render blank on a greeting.
+_MULTI_SOURCE_MODES = ("email", "rfi", "meeting", "web")
+
+
 def build_response(
     intent: str,
     query: str,
@@ -220,7 +226,17 @@ def build_response(
 ) -> dict:
     """Schema-complete /query response — mirrors generation_chain's contract."""
     answer = _RESPONSES.get(intent) or _RESPONSES["greeting"]
+    requested = {
+        tok for tok in re.split(r"[,+\s]+", (search_mode or "").lower())
+        if tok in _MULTI_SOURCE_MODES
+    }
+    extra: dict = {}
+    if requested or (search_mode or "").lower() == "hybrid":
+        extra["sources_used"] = []
+        for m in _MULTI_SOURCE_MODES:
+            extra[f"{m}_answer"] = answer if m in requested else None
     return {
+        **extra,
         "query": query,
         "contextualized_query": query,
         "answer": answer,
