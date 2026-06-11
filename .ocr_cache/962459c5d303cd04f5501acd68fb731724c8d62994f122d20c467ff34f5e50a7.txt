@@ -1,0 +1,598 @@
+1 2 3 4 5 6
+SHEET NOTES: 125 RECOMMEND INDICATING ADA VAN CLEARANCE BOGGIO /
+ED HEIGHT ON MEP DRAWINGS SO TRADES ARE AWARE.
+‘A. CONTRACTOR TO PROVIDE ALL PIPING BETWEEN STACKED FAN COIL UNIT RISERS AND 900 ROUTE CHILLED WATER SUPPLY AND RETURN PIPING
+CONNECT TO UNIT RISERS FURNISHED BY MANUFACTURER WITH FCU. SEE M-850 FOR CLOSE TO STRUCTURE, REFER TO MECHANICAL ARCHI T EC T Ss
+CHILLED WATER RISER DIAGRAMS FOR MORE INFORMATION. DETAILS AND DIAGRAMS FOR MORE INFORMATION.
+B, PIPING TO INDIVIDUAL COMMON SPACE FAN COILS TO BE 3/4” UNLESS OTHERWISE NOTED. ee OER CICAL en TIFING= TWO PIFEDETAIL
+Associated wih:
+C. CONDENSATE FROM FCU STACKS CONTINUES ON PLUMBING PLANS. 207 §=— CAPPED FOR FUTURE CONNECTION. ssociated wi
+208 | PROVIDE SHUT-OFF VALVES AT THE BASE OF RISER.
+REFER TO PIPE RISER DIAGRAMS ON M-550, TYPICAL. Took onchano mom
+209 DIRECT BURIED CHILLED WATER PIPING. INSTALL PER Sure 2508
+MANUFACTURER'S WRITTEN INSTALLATION GREENWOOD VILLAGE, CO sottt
+INSTRUCTIONS, PROVIDE THRUST BLOCKS AT vowwimegcopeen °
+. CONNECT TO EXISTING “) | peace sens memeratsns acum somes
+212 CONNECT TO EXISTING CHILLED WATER
+SUPPLY/RETURN PIPES FROM RB1.1. REMOVE CEILING, SHALL NOT BE USED OR REPRODUGED FOR ANY OTHER PROJECT
+CORE THROUGH, AIR AND WATER TIGHT, TEMP WITHOUT THE EXPRESS WRITTEN APPROVAL AND PARTICIPATION OF
+LIGHTING, REPLACE AS WAS. IMEG CORP. ©2028 IMEG CORP.
+219 PIPES TO TERMINATED AT SHUTOFF VALVES FOR ° 1 2 a
+FUTURE ROUTING INTO BUILDING 1.5. REFERENCE 1.5. ——SS
+7” DOCUMENTS FOR CONTINUATION. REF. SCALE ININCHES PROJECT #22002578.08
+B 220 FIELD DETERMINE EXACT TERMINATION POINT BASED
+= ON FUTURE RB1.5 FOUNDATION AND GROUND
+3 IMPROVEMENT WORK.
+x 482 HYDRONIC PIPING TO BE HUNG AND SUPPORTED PER
+é DETAIL, TYPICAL. 1/M-500. wv
+ao
+3 .
+g ‘
+5
+é
+8
+”
+3 l J | _— Lu
+3 < > x
+3 Q N
+2 —
+5 ND s+
+: SOO £2
+§ <i
+4 re
+i z =
+Bo D Zz 22
+5 | oS
+a AE
+g < a
+O 84
+= —
+g — =O
+2 Lu
+3 co
+uz 8
+2 i
+: => WwW ~
+j oO -~
+: Lu QO
+: IST6S)GR) GO) cP) 0) GN Gu{eL) (0)
+5 ew (cust rN aN f=, ZN D.4 B A
+& L K H F.8) F ~
+&
+: Lu
+2 i | | | I |
+3 root fhocc | | | | | | | | | | | | | | | |
+= 18 q \
+5 ae er rH nt et Hh = [= fe ee = —— +4 —_-
+5 — — ar ————— i =5 _ _ _ oO oO OS oO ot a nn _ jn ee _ nr
+E [" IT TREILY / “| i |
+8 ' a | 28.0 GPM f 4 ity tt
+3 ' Mf | Zeger fli | | | \ | | | | | | | | \ mane
+5 61)— — th LO Sorrhee Z th ae ~—— +}, - —_ - ~ oe - - el ee -~— - - - - _—
+= | RRS RSS SC SSR RR RTI OCHO S| [ Date | Description _|
+: | BRS RR ONC. [ Item | No. | Date Description
+2 eisessrenrenrorseneetenertesmoceoreemeie essences | | | rol | [ADD [001 [2025.09.15 _ [ADDENDUM 01
+s | BRIS Seo SSN BS oN |! Wl “021
+5 | BRIERE PS SS | | | ! | ! | | | | | | | [ASI [002 _|2026.02.02 _|FOR CONSTRUCTION SET
+bane Pesoeesono aD SNOT [RFI [023 [2026.02.13 _|RFI023
+ge | ERPS ES WSS EES § i ] | | a
+| ORR IE NR ERR 1 '
+& | BRS ORES TT ' [OT
+: BRR RR RR ROC | | I Io |
+# | RR RR KKK pee G) 1 ot i a a
+§ So rs | J i _| tte _ Lo _ _ I J — Jt ~_t _ Lo _ te [ to Wl _ a CC |
+z ] | ram mM Rese eps —t—— tH 1 | | | | i Po
+3 1 _ | BSS | oo ~ ft Jo a _ _ ee ne _ _ 4 _ _ — a a a
+5 Tl) firmentinar’ ||| BRSeeectesesss: RR | | Po
+= vo biti fastog] PoSeRese HR Hoge BERRA ' | | | | | |
+5 [HS102] | RRR se BR Wi PT
+5 10 a Rb OER ern | El J 4 —— I! > —-— -—l - — ——]|- —— —- —— 1 — 4 — J _ - 1 —-—b - — —- —1 ~ —_ _ —-—1- ——!- —— 4 1 — a
+3 r i] TV REECE RNR CORN
+Bess est occeeenoeeenerccecee | Po
+g SRR NPT osresorroorowooososeseseee) | I | I
+= Z.|_RSSSSSERSS IRE SS SS R ~----------5 ---- ----- ----- -}--------- ------}----5 --4-}---- E------4+-45 Lo
+§ g H Rect! -- |B ql PB Pe 5 5 ta E ; Tae] d i | B be
+2 Ch IS<] 2 SSS SSS ecu ——_ | __ _ _ a — —ir — _ _ _ ie _ — a
+Lest NF Oo CU AC te la ft a a Et eH et — ——
+g Y [.— © SSeS ston Soa A 4 ae | — ———Pr- ee - ate - eo i es Aa -] 4 - Sa — esl ee A oY S- oe A Project Status:
+8 ‘ . BERRIES | Le C205) JAIN J \N VN JIN / \\ /\9 uA]
+g 08 | \zrows—//|, BESSSe bsp pases eT el | Vy POV WK V \ | J | Vik Y | ;
+3 zewr/ F Repel Nt, ©) / \ ) \ Y \ 28.0 GPM / , /| 740.0GPM \ | fot) ||| issue / status date:
+5 5p BOSS REESE SpaaaTOWR” | / \ / \ ) \ | / \ /@d@| y NS oe Da TT
+3 LA RRR [eto ero ae / \! WW) oaks N J |! J@ |!) sone | ees J IN /. whe | pgp J 1 \ he if! ISSUE FOR BID JULY 18, 2025
+B _ TS BCWRASBTRSabetephered | A] / \F AY vey vee Z 1 ee ae Z Z VERE || ARPES Z ATS) _ Se67=eem$qJ Oo ov '0_ aes'_—'
+g O7— I RESET 18 GPM=ZiD HI | om jah oe 740.0. GPM —we oe 8a [we ow [ole FEE ber on om Sa ot us aor 7540.0 GPM [er mae Saar Lah oer] Fo) 748.0 GPM] pr / a4 ISSUE FOR PERMIT MAY 12, 2005
+5 - > 7 ee ele \ ) \ / \ / \ ) \ /. © \ MM — MSIGN DEVELOPNEA EE ERUARY a8 oppe
+8 oY 2 Ow NS *cws ate / I \ / | |-25.0 GPM | ® 25 GPM \ 4 i \y / \ J ; I \ i “wo | DESIGN DEVELOPMENT FEBRUARY 03, 2025
+3 2 CA . | (200) e'cwR \ / \ / \ eff / \ A \ / 2"CWR \ "
+& eo z= if — —8'CwR») 7 - “a ~~ —L|! Wo 4 — -I--\ ZO) ~~ 94 x — He PARKING” + SS 4 —— | —— + ——h 7% + + —~—+ -\— > - -2éewsS — \tA @y — —_— | + - — SCHEMATIC DESIGN NOVEMBER 08, 2024
+g 7S | x KY|30 GPM 4 12"cws| . x “cw! Dx 2"CWS GARAGE Xx 43.0 GPM |) a | 4COWR) SK +H
+= C7) st Le L + acwe Hh ziews__ | __/\— _Myr?ews. = — Eorewr- 1} | _SARAGE Ef | —— } browRe —ee NO IE -~-A_ _ We fe erews|__
+/\ Er 7 aN Qo t rte [fp 2cwR | SN 2 = ree ay = 2CWR? fo 7 > SOWR ~~ = iI = aa _ — —— -
+& ONE | K r VK \ , / \ SA] c28.0GPM } 2"CWS now 40.0 GPM y aews See \} >"CWS / \ HY 1 \ocws a Ia Seat:
+7 0 —s ] |_f2tercwR | \ I 1/ \ L/ of 3) it Wo Ne @ KW / NI y L/ \ — | 2"CWR_ | ay
+& Nee I ee ews ff Loe Pl alfa ae fe |e FE | to hm ohh a dist mm By Hl Lh | ORG Hit ood | oe Do Bo J ow | al eta A _ 7
+s i TP TI (Sie I EEN by i cwRe ppt ae CWREE i St re I i ScwR imu Cael a e"CWR elo i ee FOWwR a) | WR= a5 il
+8 | zowe F ave/ SS Pe CwR oe mow ET eS | i ecws st in oo es at rcws~ N aa i
+3 i NOC) \ HIGN oe \ 7 I i I \ 7 MW" cms // é'CWR Oxid | \ / | Il 7X SC es ON | — 1
+2 | / LSs-p \ He Kye ‘cw \ / (4) \ / 2'cws rr} 6'CW: 4 \. 43.0 GPM \ I arcwR/ (452) N ron \
+3 B / ss \ he 6"Cws| \ / | i \ / 2"CWR: \ J | \ MI e'cws. \ | (3) acws! (208) | B
+s a / r 4¥.0 GPM ‘| J I, \ A | | \ TY | Wh) 7 | aN J | \ | A 28.0 GPM 4 2°CWR \I
+2 a fe eye KNygews — * [meget dN dN I td fpf Nt Nd | sO | _
+s ! RK 3 2 \Yoocem j]<ecws |KUicwr' AN JI\ /\\ i \ J\ water ||// z1
+2 ' \ ee 8 / | S2"CWR N "CWS / \ YK | y, \ Yi Room 4 (208) g 28.0 Spi
+2 ae g / BA /| \ ! ) \ \ fo ( : MS coy!
+2 ' 4H 2"CWR=a} / NK / \ J \ \ / \ ——_ +
+3 Ra LANAI 8 iL Lia \ HL} ZL Nelo J \ | Z| \ _ L \ _ Mi) Y. Be | TZ _—
+2 \ i Be SO TIE Wao WI TN 1 . t Zit tl TA tN NW vt = 4 Hl — WAN #8 kh
+g — = —> IE | 4A PAH wa er) > toe is Hus sb || 16 42— | 5 a0 o- Eh eH 1 + 33 “132 pt | rao] 128) 28 1 125— za 23 ~fer-| bt Ste —I@ooy- CHL Lea —_ Project Info:
+5 cu-s| fi i © \17g6PM yt Nie yr l l nN ut | A Ty ni I | i Vy a | l Vy mh | / \. SS Ra
+s cust] be iy io —_— Ny / \ / \ / \ J \ / \ / Mot ocpn| ae Ni
+. — BR @ hk —4 4 — 4 — -}  - 4 _ -—+\-,4 | _ Ky Lt _~\|__Z _ _ \ _ _ L—21.0GPM |p SO) uh —
+5 FIN 7/ WH XY 7 N KY \/ OQ 21026 re eee
+& (TIL / 40.0 GPM \ / \ / \ A NY \ / \ / \ 72 M2"CWR 1 PS
+5 sx « x * MI 1X x | oews i 2 CNS] lecanen ET
+= I Se /\ ot ian | | Jn | | J\\ il 1 «~™s | | J \ | | J \ | * dbo ne PLS
+pE/ \ J \ J \ JIN y Yo\ J \ 2"CWR @ 3 bX oe |
+3 l Pr / \ / \ J \ y \ / \ J \ / \ ay <4 | UA RB15I ES SPR “S|
+3 V7 | A \ | / \|! | JINX iH | Y \ / \ J \ EY 46.0 GPMS—<Ac-7-4 cy U-1-2 KIO OF
+5 _ V LL tA elo \ Loo fo Pa “Afr fe ao Sco | ble | ou PN an} oo HY con oe ee oa | pi Hoan | oe 2 20 | dn 0 4 sj] 200 PM sco oh rn a wo oro} Halo [a > em Pea Cy, BS RLS
+2 Go2 le 219 EEA oe EK ctr 1 7h Lrowsti co ye ul X Ba 7 al XN Cth Z I X | Ad \ i Eas b= rl, | oO TL pod RE
+e - _ YC sss sss FF Your aw“ Sxcenaa _ lice
+8 (207) => = > _/ \ \ / \ / / NX / \ / Yi) LeBa bA Lie Vy ri H -
+= SSS SS = see \ | \ / \ / h J \ lf \ / f 40"CWS ELEC |lELECTRI
+S i \ Nie \ N y, \ IY \ | vy ee
+2 WaHIN | age —|\ _ NY. Ai _ —~IYwE a Z| L YE |! | LA De ei eee — LBA Project # 2024.21
+3 cS S Ne y 5 Ser z = r so : = 5 : : = —- > E t — - — Date: 05/12/25
+3 | | | | | | | I L | | Drawn by: SSA
+g © —100ws ot A Checked by: TWG
+é | | | 6—10cwn_ 2 2) |
+2 | | 14 iI | | | I Wl | | | | | | | | | Sheet
+: | | | | | i! Name:
+A
+[=
+g
+b3* | | | | | | | | | | | | | | | | | | | | | | OVERALL PIPING PLAN -
+32
+3 LEVEL 1
+g ~~
+a §
+28
+i g Sheet Numba
+= umber:
+2n
+°
+S
+2 OVERALL PIPING PLAN - LEVEL 1
+Eo He" = 1-0"
+ge =
+ge
+- 2.
+gaze
+tire!
+£265 1 2 3 4 5 6
+KEYNOTES
+LANTZ
+125
+RECOMMEND INDICATING ADA VAN CLEARANCE
+SHEET NOTES:
+HEIGHT ON MEP DRAWINGS SO TRADES ARE AWARE.
+BOGGIO/
+A.
+CONTRACTOR TO PROVIDE ALL PIPING BETWEEN STACKED FAN COIL UNIT RISERS AND
+1200
+ROUTE CHILLED WATER SUPPLY AND RETURN PIPING
+CONNECT TO UNIT RISERS FURNISHED BY MANUFACTURER WITH FCU. SEE M-550 FOR
+CLOSE TO STRUCTURE. REFER TO MECHANICAL
+CHILLED WATER RISER DIAGRAMS FOR MORE INFORMATION.
+DETAILS AND DIAGRAMS FOR MORE INFORMATION.
+ARCHITECTS
+1203,
+REFER TO FAN COIL UNIT PIPING - TWO PIPE DETAIL
+PIPING TO INDIVIDUAL COMMON SPACE FAN COILS TO BE 3/4" UNLESS OTHERWISE NOTED.
+2/M-501, TYPICAL.
+CONDENSATE FROM FCU STACKS CONTINUES ON PLUMBING PLANS.
+1207
+CAPPED FOR FUTURE CONNECTION.
+(Associated with:
+1208
+PROVIDE SHUT-OFF VALVES AT THE BASE OF RISER.
+REFER TO PIPE RISER DIAGRAMS ON M-550, TYPICAL.
+‘7600 E ORCHARD ROAD
+209
+DIRECT BURIED CHILLED WATER PIPING. INSTALL PER
+‘SUITE 2505
+MANUFACTURER'S WRITTEN INSTALLATION
+IME
+P: 303.796.
+GREENWOOD VILLAGE, CO 80111
+INSTRUCTIONS. PROVIDE THRUST BLOCKS AT
+wowimegcorp.com
+CHANGES IN DIRECTION.
+IMEG CORP. RESERVES PROPRIETARY RIGHTS, INCLUDING COPYRIGHTS,
+212
+CONNECT TO EXISTING CHILLED WATER
+‘TO THIS DRAWING AND THE DATA SHOWN THEREON. SAID DRAWING
+ANDIOR DATA ARE THE EXCLUSIVE PROPERTY OF IMEG CORP. AND
+SUPPLY/RETURN PIPES FROM RB1.1. REMOVE CEILING,
+WITHOUT THE EXPRESS WRITTEN APPROVAL AND PARTICIPATION OF
+SHALL NOT BE USED OR REPRODUCED FOR ANY OTHER PROJECT
+CORE THROUGH, AIR AND WATER TIGHT, TEMP.
+IMEG CORP. ©2023 IMEG CORP.
+LIGHTING, REPLACE AS WAS.
+1219
+PIPES TO TERMINATED AT SHUTOFF VALVES FOR
+4
+2
+3
+FUTURE ROUTING INTO BUILDING 1.5. REFERENCE 1.5
+DOCUMENTS FOR CONTINUATION.
+REF, SCALE IN INCHES
+‘PROJECT #22002578.09
+1220
+FIELD DETERMINE EXACT TERMINATION POINT BASED
+ON FUTURE RB1.5 FOUNDATION AND GROUND:
+IMPROVEMENT WORK.
+452
+HYDRONIC PIPING TO BE HUNG AND SUPPORTED PER
+DETAIL, TYPICAL. 1/M-500.
+) {GR
+GMHGL
+ausres
+@
+@)
+C) @3 @)
+CH 6a 60)
+CieaC
+iG
+an
+Tye
+|
+[—
+aa
+f
+Fe
+ff
+/
+i q
+HF
+28.0 GPM
+V
+E
+Revisions:
+jf
+[i
+—
+_
+6a?
+ray
+Item | No.
+Date
+Description
+ADD.
+1001
+2025.09.15
+ADDENDUM 01
+ASI
+1002
+2026.02.02 _|FOR CONSTRUCTION SET
+RFI
+1023
+2026.02.13
+RFI 023.
+125,
+"CWS;
+"CWI
+$5.0 6PM
+Ci
++
+11
+— +4
+Hy
+Al
+i+
+IR 02
+Witt! fast03]
+2 1/2"C WI
+!_ 9 1
+©
+TZ
+- ae eee
+a----
+-L--------
+-~-----[----,
+--J-b----
+{22.0 GPM
+LL)
+BRCKELDW |
+L+
+at
+i=]
+LBP L
+ot
+FCU--
+oF
+=m
+ras
+Tr
+Project Status:
+ELI
+OR203 | A
+EUH-1
+‘2"CWS:-
+2°CWR-
+©)
+ROOM.
+40.0 GPM
+fan
+issue / status
+date:
+TerCwR-
+90
+| As
+E101
+(9)
+ISSUE FOR BID
+JULY 18, 2025
+8"CWwl
+ow
+[4102] ! a
+MI
+ped
+EP
+ee
+ees
+_—
+3"Cws
+aoe GPM
+FH woo
+om un
+or
+e- EAT 7 ve
+te
+wes] -77-43.0 GPMose
+\
+"087
+Pi
+ISSUE FOR PERMIT
+od
+MAY 12, 2025
+25.0 GPM
+25 GPM
+DESIGN DEVELOPMENT
+2 1/2"CWs
+200,
+4°CWS
+V4
+40.0 cpm, :
+FEBRUARY 03, 2025
+8"CWR>\
+8"CWR
+on
+_®
+2"cwR
+PARKING
+NY
+— ~2rews
+SCHEMATIC DESIGN
+NOVEMBER 08, 2024
+WS:
+SZ
+-4"CWR
+30 GPM
+4s
+w27cws|_
+2"CWS
+=
+| 2°CWs
+2"CWR-
+GARAGE
+- 8°CWS.
+71 1/2"°CWR)
+-2"CWR
+"CWR
+43.0 cen NE
+—-
+oo =e
+fj |
+8"CWwR-
+Ox
+"Ci
+2"CWS:
+"CWS
+2"CWS-
+2CwR
+Seal:
+2"cwl
+Z
+2:1/2"CWR |
+og
+Bp
+2°CWR_ |
+real
+!2 1/2"CWS.
+Sa
+1
+im
+bel _ so
+sea _|__oa
+—10h
+Li
+_— You
+I
+| fo
+01
+so
+Bt
+aul
+fy
+oe:
+Lu
+|| en
+zh
+ez
+3"
+"CWR-
+de
+T
+"CWR: iM
+ZA
+6"CWR:
+“wi
+8"CWS;
+R-
+8)
+08
+"CW.
+tp
+"CW!
++ 6"CWR
+2°"CWS:
+40.0 GPM.
+//
+"CW
+® 43.0 GPM
+4"CWR-
+ercws
+IN
+lM
+6"CWS.
+2"CWS*
+208:
+4y.0 GPM
+2"CWR,
+WS —
+~_|
+Tae
+fs TE
+— oe:
+Lk
+¥0.0 GPM
+S<o*Cws
+“CWR
+"WATER
+‘i
+ROOM
+208
+28.0 GPM)
+(4405
+‘CWR:
+AAGNR
+as
+. 4
+l
+206
+— +
+if
+LL
+7.5 GPM.
+4'
+4+
+us
+7%
+se
+co
+ote
+“32 pT
+—1
+7125
+I ws
+Aer|
+ferry
+Project Info:
+17.
+PM
+Fi
+ay] 7b
+STAI
+CU-1-3
+,@
+on oa
+oe
++A
+— 4
+21.0 GPM.
+eso
+tS
+IE
+7
+Q,
+2 112"CWR
+\/
+Pr
+arcws/]
+21/2"CWS:
+<x
+RB1.5)
+ZONE
+SK
+Ou
+U-1-1
+OX?
+j
+46.0 GPM<ag.
+1-1
+U-1-2
+L)
+ld
+uo
+Lv
+suo} _o10
+sao _|
+960
+LI v0
+eo | oe
+290 | sao
+—eoj__||_ 20
+a a
+si
+}-882.7 GPM.
+tH
+THI
+<4
+nil
+norcwsitt
+rT
+10"CWR-
+J)
+NCY
+CB1.1
+=> =
+\I
+10"CWS
+EC
+ELECTRI
+(220)
+\C-1-2
+[4403]
+AC-1-3
+(ape
+pa
+ty
+AF
+qd
+u
+BA Project #
+2024.21
+Ut
+y
+tt
+pe.
+Et
+ns
+05/12/25
+D
+rawn by:
+SSA
+10'CWS——e
+Checked by: TWG
+10"CWR——?
+Sheet
+Name:
+OVERALL PIPING PLAN -
+LEVEL 1
+Sheet Number:
+OVERALL PIPING PLAN - LEVEL 1
+1/16" = 1'-0"
+M-301
+2s

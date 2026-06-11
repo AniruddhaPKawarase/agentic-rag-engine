@@ -20,6 +20,20 @@ from typing import Iterator, Optional, Union
 from agentic.generation.llm_client import generate
 from agentic.generation.text_normalizer import normalize_chunks, normalize_output
 
+# Hallucination Guard v2 -- Pillar 6 anti-anchor (env-flag gated; no-op when off)
+try:
+    from agentic.hallucination_guard.pillar_6_anti_anchor import compose_system_prompt as _hg_p6_wrap
+except Exception:  # pragma: no cover -- package absent -> no-op
+    def _hg_p6_wrap(s: str) -> str:
+        return s
+
+# Hallucination Guard v2 -- Pillar 7 citation validator (env-flag gated; no-op when off)
+try:
+    from agentic.hallucination_guard.pillar_7_citation import post_validate as _hg_p7_validate
+except Exception:  # pragma: no cover -- package absent -> identity stub
+    def _hg_p7_validate(answer, force_enable=None):
+        return answer, {"pillar": 7, "applied": False}
+
 logger = logging.getLogger("agentic_rag.generation.synthesizer")
 
 # ── Tunables ───────────────────────────────────────────────────────────
@@ -85,6 +99,8 @@ def synthesize(
     system_prompt = _SYSTEM_PROMPT
     if shape_block:
         system_prompt = f"{shape_block}\n\n{system_prompt}"
+    # Pillar 6 anti-anchor wrap (HG v2) -- no-op when HG_PILLAR_6=false.
+    system_prompt = _hg_p6_wrap(system_prompt)
 
     user_prompt = _build_user_prompt(
         raw_answer=raw_answer,
@@ -112,7 +128,12 @@ def synthesize(
     )
     if stream:
         return normalize_chunks(result)
-    return normalize_output(result) if isinstance(result, str) else result
+    final = normalize_output(result) if isinstance(result, str) else result
+    # Pillar 7 post-hoc citation validation (HG v2). When HG_PILLAR_7=false,
+    # _hg_p7_validate is a no-op and returns (final, {applied: False}).
+    if isinstance(final, str):
+        final, _ = _hg_p7_validate(final)
+    return final
 
 
 # ── Internals ──────────────────────────────────────────────────────────

@@ -135,7 +135,19 @@ def download_bytes(s3_key: str) -> Optional[bytes]:
         logger.info("Downloaded s3://%s/%s (%d bytes)", config.bucket_name, s3_key, len(data))
         return data
     except Exception as e:
-        logger.error("download_bytes failed for %s: %s", s3_key, e)
+        # A missing object (NoSuchKey/404) is an EXPECTED condition — e.g. a
+        # client passes a session_id that was never persisted, and the memory
+        # manager probes S3 on each lookup. Logging that at ERROR floods the
+        # logs (6+ identical lines/sec for one missing session). Demote the
+        # not-found case to DEBUG; keep real failures (auth, network) at ERROR.
+        code = ""
+        resp = getattr(e, "response", None)
+        if isinstance(resp, dict):
+            code = (resp.get("Error") or {}).get("Code", "") or ""
+        if code in ("NoSuchKey", "404", "NoSuchBucket") or "NoSuchKey" in str(e):
+            logger.debug("download_bytes: object not found s3://%s/%s", config.bucket_name, s3_key)
+        else:
+            logger.error("download_bytes failed for %s: %s", s3_key, e)
         return None
 
 

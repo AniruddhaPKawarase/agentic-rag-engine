@@ -9,8 +9,14 @@ import time
 import hashlib
 
 from openai import OpenAI
-from config.settings import settings
-from utils.logger import logger
+# [V18-WEB-IMPORT-FIX] package-absolute imports — bare 'config' resolves to
+# agentic/config.py (a module, not a package) at runtime, crashing web mode
+try:
+    from traditional.config.settings import settings
+    from traditional.utils.logger import logger
+except ImportError:  # standalone execution from traditional/ dir
+    from config.settings import settings
+    from utils.logger import logger
 
 client = OpenAI()
 

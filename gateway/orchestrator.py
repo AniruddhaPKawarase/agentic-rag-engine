@@ -437,6 +437,35 @@ def _maybe_rerank(query: str, source_documents: Any) -> Any:
         return source_documents
 
 
+def _maybe_citation_sort(query: str, answer: Any, source_documents: Any) -> Any:
+    """Citation-aware reorder of source_documents (env-flag gated).
+
+    Bubbles docs the answer actually cites to the top. Pure, idempotent,
+    safe: never drops, fabricates, or modifies sources or the answer.
+    Returns input unchanged when the flag is off or when the answer carries
+    no recognisable citation tokens.
+    """
+    enabled = os.environ.get("CITATION_AWARE_SORT_ENABLED", "true").strip().lower() in (
+        "1", "true", "yes", "on"
+    )
+    if not enabled:
+        return source_documents
+    if not isinstance(source_documents, list) or len(source_documents) <= 1:
+        return source_documents
+    answer_str = answer if isinstance(answer, str) else (str(answer or "") if answer else "")
+    try:
+        from gateway.citation_aware_sort import citation_aware_sort
+        return citation_aware_sort(
+            query=query or "",
+            answer=answer_str,
+            source_documents=source_documents,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("citation_aware_sort failed, keeping order: %s", exc)
+        return source_documents
+
+
+
 def _ensure_signed_source_urls(source_documents: Any) -> None:
     """Fix #8: In-place re-sign any unsigned download URLs in source_documents.
 
@@ -467,6 +496,36 @@ def _ensure_signed_source_urls(source_documents: Any) -> None:
             continue
         if new_url:
             sd["download_url"] = new_url
+
+
+def _classify_source_document_type(src, doc):
+    """Return "drawing" / "specification" / "unknown" for one source.
+
+    Order matters: strong drawing signals (bbox/drawing_id) beat parent_id
+    ambiguity (v3 drawings carry parent_id = drawing_id). s3_path substrings
+    are decisive when present.
+    """
+    if not isinstance(src, dict):
+        return "unknown"
+    explicit = (src.get("source_type") or src.get("source_document_type") or "").strip().lower()
+    if explicit in ("drawing", "drawings"):
+        return "drawing"
+    if explicit in ("specification", "specifications", "spec", "specs"):
+        return "specification"
+    s3 = (src.get("s3_path") or src.get("s3BucketPath") or src.get("sourceFile") or "")
+    s3_lower = s3.lower()
+    if "/specification/" in s3_lower or "/specifications/" in s3_lower:
+        return "specification"
+    if "/drawing/" in s3_lower or "/drawings/" in s3_lower:
+        return "drawing"
+    if src.get("bbox_px") or src.get("drawingId") or src.get("drawing_id") or src.get("sheet_number"):
+        return "drawing"
+    if src.get("specificationNumber") or src.get("sectionTitle") or src.get("csi_division"):
+        return "specification"
+    parent_id = src.get("parentId") or src.get("parent_id")
+    if parent_id not in (None, "", 0):
+        return "specification"
+    return "unknown"
 
 
 def _extract_source_documents(
@@ -552,12 +611,24 @@ def _extract_source_documents(
             # relevance from spec_search → score fallback
             if not doc.get("score") and src.get("relevance"):
                 doc["score"] = src.get("relevance")
+            # v3.3 (2026-05-18) — surface parent_id for downstream spec
+            # dedup. The spec collection stores each section as N fragments
+            # that all share the same parentId; without this field every
+            # chunk arrives at the UI as a separate "reference" even
+            # though they're slices of one doc. Drawings have null parentId.
+            parent_id = src.get("parentId") or src.get("parent_id")
+            if parent_id is not None:
+                doc["parent_id"] = parent_id
+            # Optional: doc number within section (for ordering display)
+            if src.get("docNumber") is not None:
+                doc["doc_number"] = src.get("docNumber")
+            doc["source_document_type"] = _classify_source_document_type(src, doc)
             source_documents.append(doc)
             if s3_path:
                 s3_paths.append(s3_path)
         elif isinstance(src, str):
             download_url = _build_download_url(src, src)
-            source_documents.append({
+            str_doc = {
                 "s3_path": src,
                 "file_name": src,
                 "display_title": src,
@@ -566,10 +637,269 @@ def _extract_source_documents(
                 "drawing_name": "",
                 "drawing_title": "",
                 "page": None,
-            })
+            }
+            str_doc["source_document_type"] = _classify_source_document_type({"s3_path": src}, str_doc)
+            source_documents.append(str_doc)
             s3_paths.append(src)
 
+    # ----- v3.3 parent_id dedup (2026-05-18) -----
+    # When multiple source_documents share the same parent_id, they are
+    # different chunks of the SAME spec section. Keep ONE representative
+    # per parent_id (the one with the highest retrieval score; tiebreak
+    # by lowest doc_number / first-seen). Record total fragment_count so
+    # the UI can render "HVAC PIPING INSULATION (consolidated from 12
+    # fragments)" if desired. Drawings have null parent_id and are
+    # untouched by this dedup.
+    by_parent: dict = {}
+    keep_order: list = []
+    standalones: list = []
+    for d in source_documents:
+        pid = d.get("parent_id")
+        if pid is None:
+            standalones.append(d)
+            continue
+        if pid not in by_parent:
+            by_parent[pid] = {"doc": d, "count": 1, "best_score": _score_of(d)}
+            keep_order.append(pid)
+        else:
+            slot = by_parent[pid]
+            slot["count"] += 1
+            this_score = _score_of(d)
+            if this_score > slot["best_score"]:
+                slot["doc"] = d
+                slot["best_score"] = this_score
+    deduped: list = list(standalones)
+    for pid in keep_order:
+        slot = by_parent[pid]
+        rep = dict(slot["doc"])
+        rep["fragment_count"] = slot["count"]
+        deduped.append(rep)
+    if len(deduped) != len(source_documents):
+        logger.info(
+            "spec_dedup: collapsed %d -> %d source_documents (by parent_id)",
+            len(source_documents), len(deduped),
+        )
+    source_documents = deduped
+    # Resync s3_paths to match the deduped set
+    s3_paths = [d.get("s3_path") for d in source_documents if isinstance(d, dict) and d.get("s3_path")]
+
+    # v3 bbox enrichment — additive only; surfaces highlight boxes on PNG.
+    try:
+        _enrich_v3_with_bbox(source_documents)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("v3 bbox enrich: skipped due to: %s", exc)
+
     return source_documents, s3_paths
+
+
+
+
+
+# ---------------------------------------------------------------------------
+# v3 bbox enrichment (2026-05-20)
+# ---------------------------------------------------------------------------
+# Surfaces highlight-friendly fields on source_documents that originate from
+# the v3 collections (drawings_v3 / specifications_v3). Pulls the matched
+# textBlocks' bbox + page geometry so the UI can draw a highlight box on the
+# PNG page render. Strictly additive — does not touch any existing field
+# and is a no-op for legacy sources or for v3 docs that already carry bbox.
+
+_V3_BBOX_TEXTBLOCK_CAP = 3
+_V3_BBOX_TEXT_CAP = 500
+
+
+def _enrich_v3_with_bbox(source_documents: list) -> None:
+    """Mutate source_documents in place; add bbox_pt/bbox_px/text_blocks
+    by looking up each doc's pdfName in v3 Mongo collections.
+    Failures are swallowed and logged; never raises.
+    """
+    if not source_documents:
+        return
+    pdf_names = [
+        d.get("pdf_name") for d in source_documents
+        if isinstance(d, dict) and d.get("pdf_name")
+    ]
+    if not pdf_names:
+        return
+    try:
+        from pymongo import MongoClient
+        mongo_uri = os.environ.get("MONGODB_URI")
+        mongo_db = os.environ.get("MONGO_DB", "iField")
+        if not mongo_uri:
+            return
+        client = MongoClient(mongo_uri)
+        db = client[mongo_db]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("v3 bbox enrich: mongo init failed: %s", exc)
+        return
+
+    spec_proj = {
+        "_id": 1, "pdfName": 1, "textBlocks": 1,
+        "drawingId": 1, "csi": 1, "specificationNumber": 1,
+        "pageCount": 1,
+    }
+    drawing_proj = {
+        "_id": 1, "pdfName": 1, "textBlocks": 1,
+        "drawingId": 1, "page": 1, "sheetNumber": 1,
+        "widthPt": 1, "heightPt": 1,
+    }
+    spec_lookup: dict = {}
+    drawing_lookup: dict = {}
+    try:
+        for d in db.specifications_v3.find(
+            {"pdfName": {"$in": pdf_names}}, spec_proj
+        ):
+            spec_lookup[d["pdfName"]] = d
+        for d in db.drawings_v3.find(
+            {"pdfName": {"$in": pdf_names}}, drawing_proj
+        ):
+            drawing_lookup[d["pdfName"]] = d
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("v3 bbox enrich: mongo pdfName query failed: %s", exc)
+        return
+
+    # Fallback lookup keys for source_docs whose pdfName misses v3 (legacy
+    # may carry a different revision of the same section).
+    csi_hints: set = set()
+    sheet_hints: set = set()
+    drawing_id_hints: set = set()
+    for d in source_documents:
+        if not isinstance(d, dict):
+            continue
+        if d.get("pdf_name") in spec_lookup or d.get("pdf_name") in drawing_lookup:
+            continue
+        dn = (d.get("drawing_name") or "").strip()
+        if dn:
+            digits = "".join(ch for ch in dn if ch.isdigit())
+            if len(digits) >= 6:
+                csi_hints.add(digits[:6])
+            sheet_hints.add(dn)
+        did = d.get("drawing_id")
+        if did is not None:
+            drawing_id_hints.add(did)
+    try:
+        if csi_hints:
+            for d in db.specifications_v3.find(
+                {"csi": {"$in": list(csi_hints)}}, spec_proj
+            ):
+                spec_lookup.setdefault("__csi:" + (d.get("csi") or ""), d)
+        if drawing_id_hints:
+            for d in db.drawings_v3.find(
+                {"drawingId": {"$in": list(drawing_id_hints)}}, drawing_proj
+            ):
+                drawing_lookup.setdefault("__did:" + str(d.get("drawingId")), d)
+        if sheet_hints:
+            for d in db.drawings_v3.find(
+                {"sheetNumber": {"$in": list(sheet_hints)}}, drawing_proj
+            ):
+                drawing_lookup.setdefault("__sheet:" + (d.get("sheetNumber") or ""), d)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("v3 bbox enrich: fallback lookup failed: %s", exc)
+
+    for doc in source_documents:
+        if not isinstance(doc, dict):
+            continue
+        pdf_name = doc.get("pdf_name")
+        if not pdf_name:
+            continue
+        # already enriched on a prior pass — leave it alone
+        if doc.get("bbox_pt") is not None and doc.get("text_blocks"):
+            continue
+        mongo_doc = spec_lookup.get(pdf_name) or drawing_lookup.get(pdf_name)
+        if not mongo_doc:
+            dn = (doc.get("drawing_name") or "").strip()
+            digits = "".join(ch for ch in dn if ch.isdigit())[:6]
+            if digits:
+                mongo_doc = spec_lookup.get("__csi:" + digits)
+            if not mongo_doc and doc.get("drawing_id") is not None:
+                mongo_doc = drawing_lookup.get("__did:" + str(doc["drawing_id"]))
+            if not mongo_doc and dn:
+                mongo_doc = drawing_lookup.get("__sheet:" + dn)
+        if not mongo_doc:
+            continue
+        text_blocks = mongo_doc.get("textBlocks") or []
+        if not text_blocks:
+            continue
+        # if the doc has a target page, prefer textBlocks on that page
+        target_page = doc.get("page")
+        if target_page is not None:
+            on_page = [b for b in text_blocks if b.get("page") == target_page]
+            if on_page:
+                text_blocks = on_page
+        # rank by text length descending (longest = most informative)
+        # but skip empty / very short blocks
+        # prefer blocks WITH a bbox_pt (drawable for highlights). Fall back
+        # to any block with text if no bbox-bearing block exists.
+        with_bbox = [
+            b for b in text_blocks
+            if isinstance(b, dict) and b.get("text")
+            and len((b.get("text") or "").strip()) > 10
+            and b.get("bbox_pt")
+        ]
+        if with_bbox:
+            candidates = with_bbox
+        else:
+            candidates = [
+                b for b in text_blocks
+                if isinstance(b, dict) and b.get("text")
+                and len((b.get("text") or "").strip()) > 10
+            ]
+        if not candidates:
+            continue
+        candidates.sort(key=lambda b: -len(b.get("text") or ""))
+        chosen = candidates[:_V3_BBOX_TEXTBLOCK_CAP]
+        slim_blocks = []
+        for b in chosen:
+            slim_blocks.append({
+                "text": (b.get("text") or "")[:_V3_BBOX_TEXT_CAP],
+                "bbox_pt": b.get("bbox_pt"),
+                "bbox_px": b.get("bbox_px"),
+                "page": b.get("page"),
+                "page_width_pt": b.get("page_width_pt"),
+                "page_height_pt": b.get("page_height_pt"),
+            })
+        primary = slim_blocks[0]
+        # only set if not already present (legacy may have populated)
+        if doc.get("bbox_pt") is None and primary.get("bbox_pt") is not None:
+            doc["bbox_pt"] = primary["bbox_pt"]
+        if doc.get("bbox_px") is None and primary.get("bbox_px") is not None:
+            doc["bbox_px"] = primary["bbox_px"]
+        if doc.get("page_width_pt") is None and primary.get("page_width_pt") is not None:
+            doc["page_width_pt"] = primary["page_width_pt"]
+        if doc.get("page_height_pt") is None and primary.get("page_height_pt") is not None:
+            doc["page_height_pt"] = primary["page_height_pt"]
+        # drawings carry page geometry at the doc level (widthPt/heightPt)
+        if doc.get("page_width_pt") is None and mongo_doc.get("widthPt") is not None:
+            doc["page_width_pt"] = mongo_doc["widthPt"]
+        if doc.get("page_height_pt") is None and mongo_doc.get("heightPt") is not None:
+            doc["page_height_pt"] = mongo_doc["heightPt"]
+        doc.setdefault("text_blocks", slim_blocks)
+        # fill page + text_excerpt from primary textBlock when missing
+        if doc.get("page") is None and primary.get("page") is not None:
+            doc["page"] = primary["page"]
+        if not doc.get("text_excerpt") and primary.get("text"):
+            doc["text_excerpt"] = primary["text"]
+        # prod-schema parity defaults — only set when missing.
+        # v3 sections are not fragmented; surface drawingId as a stable
+        # parent_id handle so the UI's "group by section" logic keeps working.
+        if doc.get("parent_id") is None:
+            pid = mongo_doc.get("drawingId")
+            if pid is not None:
+                doc["parent_id"] = pid
+        if doc.get("fragment_count") is None:
+            doc["fragment_count"] = 1
+        if doc.get("doc_number") is None:
+            doc["doc_number"] = 1
+
+
+def _score_of(doc: dict) -> float:
+    """Helper for parent_id dedup — pick the highest-scored chunk."""
+    if not isinstance(doc, dict):
+        return 0.0
+    try:
+        return float(doc.get("score") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -653,6 +983,7 @@ class AgenticEngine:
         set_id: Optional[int] = None,
         conversation_history: Optional[list] = None,
         scope: Optional[dict] = None,
+        **kwargs: Any,
     ) -> Any:
         """Run the agentic RAG pipeline in a thread (blocking call).
 
@@ -672,6 +1003,7 @@ class AgenticEngine:
             set_id=set_id,
             conversation_history=conversation_history,
             scope=scope,
+            progress_callback=kwargs.get('progress_callback'),
         )
         return result
 
@@ -780,6 +1112,8 @@ class Orchestrator:
         project_id: int,
         engine: Optional[str] = None,
         session_id: Optional[str] = None,
+        user_id: Optional[int] = None,
+        client_session_id: Optional[str] = None,
         set_id: Optional[int] = None,
         conversation_history: Optional[list] = None,
         search_mode: Optional[str] = None,
@@ -811,6 +1145,23 @@ class Orchestrator:
         self._last_query = query
         self._last_project_id = project_id
         self._last_session_id = session_id
+
+        # [CG-V1] conversational gate — single source of truth for streaming,
+        # quick-query and any caller that bypasses the /query endpoint gate.
+        try:
+            from gateway.conversational_gateway import (
+                detect as _cg_detect, build_response as _cg_build,
+            )
+            _cg_intent = _cg_detect(query)
+        except Exception as _cg_exc:  # noqa: BLE001
+            logger.warning("[cg-v1] detect failed (%s); pipeline continues", _cg_exc)
+            _cg_intent = None
+        if _cg_intent:
+            logger.info("[cg-v1] orchestrator intercepted intent=%s mode=%s",
+                        _cg_intent, explicit_search_mode)
+            return _cg_build(_cg_intent, query, project_id=project_id,
+                             session_id=session_id or client_session_id,
+                             search_mode=explicit_search_mode)
 
         # --- Phase 3.2: auto-route via intent classifier ---
         # Only classify when caller did NOT explicitly pick a search_mode.
@@ -889,13 +1240,45 @@ class Orchestrator:
             )
 
         # --- Resolve session scope ---
-        scope = None
+        # [COGUP-MARKER-ORCH-SCOPE-PRESERVE] preserve TADR scope passed via kwargs
+        _inbound_scope = kwargs.get('scope')
+        scope = dict(_inbound_scope) if isinstance(_inbound_scope, dict) else None
+        # [V19-3-MODE-DERIVE] collection scope from search_mode — single source of truth
+        # covering /query/stream, /quick-query and any caller that forwards search_mode.
+        try:
+            import os as _os_v193
+            if (explicit_search_mode
+                    and _os_v193.getenv("COLLECTION_MODES_ENABLED", "true").lower() == "true"):
+                _cm_alias = {"drawing": "drawing", "drawings": "drawing",
+                             "specification": "specification",
+                             "specifications": "specification", "spec": "specification"}
+                _coll_from_mode = None
+                for _tok in str(explicit_search_mode).split(","):
+                    _hit = _cm_alias.get(_tok.strip().lower())
+                    if _hit:
+                        _coll_from_mode = _hit
+                        break
+                if _coll_from_mode:
+                    scope = dict(scope) if scope else {}
+                    scope.setdefault("_collection_scope", _coll_from_mode)
+                    logger.info("[v19-3] collection scope from search_mode: %s", _coll_from_mode)
+        except Exception as _v193_exc:
+            logger.warning("[v19-3] mode-derive failed: %s", _v193_exc)
+        if scope:
+            logger.info(
+                'orchestrator: inbound scope kept (keys=%s)',
+                sorted(list(scope.keys()))[:8])
         if session_id:
             try:
                 from shared.session.manager import get_document_scope
                 scope_state = get_document_scope(session_id)
                 if scope_state.get("is_active"):
-                    scope = scope_state
+                    # Merge session scope on top of inbound (session pin wins for explicit drawing pinning)
+                    if scope is None:
+                        scope = scope_state
+                    else:
+                        for k, v in scope_state.items():
+                            scope.setdefault(k, v)
                     logger.info(
                         "Query scoped to: %s (%s)",
                         scope.get("drawing_title") or scope.get("section_title"),
@@ -913,7 +1296,9 @@ class Orchestrator:
         # message — that approach busted the OpenAI auto-cache on every turn.
         rrf_scope: dict | None = None
         multi_query_diagnostic: dict | None = None
-        if MULTI_QUERY_RRF_ENABLED and not scope:
+        # [TADR-PHASE3] Skip multi-query RRF when TADR has HIGH confidence routing
+        _tadr_skip_rrf = bool(kwargs.get('skip_multi_query_rrf'))
+        if MULTI_QUERY_RRF_ENABLED and not scope and not _tadr_skip_rrf:
             try:
                 from gateway.retrieval_enrichment import build_context_hint, format_hint_for_agent
                 hint = await asyncio.to_thread(
@@ -967,6 +1352,7 @@ class Orchestrator:
                 set_id=set_id,
                 conversation_history=conversation_history,
                 scope=effective_scope,
+                progress_callback=kwargs.get('progress_callback'),
             )
         except Exception as exc:
             agentic_error = str(exc)
@@ -994,6 +1380,8 @@ class Orchestrator:
                 active_session_id = mm.create_session(
                     user_query=query,
                     project_id=project_id,
+                    user_id=user_id,
+                    client_session_id=client_session_id,
                 )
             # Add user message
             mm.add_to_session(
@@ -1034,7 +1422,10 @@ class Orchestrator:
                 pass
 
         # --- Success: agentic answered well ---
-        if not _should_fallback(agentic_result):
+        # [V19-FALLBACK-GUARD] collection-scoped modes never fall back to the mixed-corpus
+        # traditional FAISS engine (it would break the single-collection guarantee)
+        _v19_scoped = bool((scope or {}).get("_collection_scope")) if isinstance(scope, dict) else False
+        if _v19_scoped or not _should_fallback(agentic_result):
             resp = self._build_response(
                 result=agentic_result,
                 engine="agentic",
@@ -1529,8 +1920,11 @@ class Orchestrator:
         try:
             from agentic.core.cache import get_agent_result  # type: ignore
 
+            # [V19-3-CHAIN-CACHE] include collection mode — prevents cross-mode
+            # Branch-A cache re-expression (spec query served a drawings answer)
+            _v193_mode = (scope or {}).get("_collection_scope") if isinstance(scope, dict) else None
             cached_obj = await asyncio.to_thread(
-                get_agent_result, user_query, project_id, set_id,
+                get_agent_result, user_query, project_id, set_id, _v193_mode,
             )
             if cached_obj is not None:
                 # Convert AgentResult-like → minimal dict for Branch A.
@@ -1623,6 +2017,9 @@ class Orchestrator:
             # These are never the correct source for a specific question.
             resp["source_documents"] = _strip_boilerplate_sources(resp.get("source_documents"))
             # Fix #2: optional LLM-as-judge reorder (no-op when flag off)
+            resp["source_documents"] = _maybe_citation_sort(
+                self._last_query or "", resp.get("answer", ""), resp.get("source_documents")
+            )
             resp["source_documents"] = _maybe_rerank(
                 self._last_query or "", resp.get("source_documents")
             )
@@ -1650,6 +2047,9 @@ class Orchestrator:
                 resp["processing_time_ms"] = elapsed_ms
             _ensure_signed_source_urls(resp.get("source_documents"))
             resp["source_documents"] = _strip_boilerplate_sources(resp.get("source_documents"))
+            resp["source_documents"] = _maybe_citation_sort(
+                self._last_query or "", resp.get("answer", ""), resp.get("source_documents")
+            )
             resp["source_documents"] = _maybe_rerank(
                 self._last_query or "", resp.get("source_documents")
             )
@@ -1686,6 +2086,9 @@ class Orchestrator:
         # through on a title-keyword coincidence.
         source_documents = _strip_boilerplate_sources(source_documents)
         # Fix #2: optional reorder of agentic sources by direct relevance
+        source_documents = _maybe_citation_sort(
+            self._last_query or "", answer, source_documents
+        )
         source_documents = _maybe_rerank(self._last_query or "", source_documents)
 
         # Fix #4: optional groundedness verification (nested under debug_info)

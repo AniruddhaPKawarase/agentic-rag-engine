@@ -61,6 +61,7 @@ import os
 import re
 import time
 from typing import Any, AsyncIterator, Awaitable, Dict, List, Optional, Union
+from gateway.answer_post_processor import post_process as _tier_e_post_process
 
 logger = logging.getLogger("agentic_rag.chain")
 
@@ -411,6 +412,7 @@ async def _branch_full_pipeline(
     )
     contextualized_query = rewrite_out.get("contextualized_query", user_query)
     query_rewritten = bool(rewrite_out.get("was_rewritten"))
+    rewriter_skip_reason = rewrite_out.get("skip_reason")  # CONTEXT-FIX 2026-05-29
 
     # 2.5 Upgrade 1 — Multi-Query + RRF (flag-gated, no-op when off)
     # The orchestrator may have already injected the RRF hint into scope
@@ -483,13 +485,20 @@ async def _branch_full_pipeline(
             final_answer = stylized
             stylist_used = True
 
-    # 6. Memory writer (fire-and-forget — never await)
-    _dispatch_memory_writer(
+    # 5.5 Tier E post-processor (Method line + citation rewrite)
+    final_answer = _tier_e_post_process(final_answer, agent_result)
+
+    # 6. Memory writer (fire-and-forget — never await). Mints turn_id
+    # synchronously so the HTTP response can echo it for Deep Dive trigger.
+    # Persist source_documents alongside the turn so Deep Dive can find
+    # the cited refs without re-hitting Mongo.
+    turn_id = _dispatch_memory_writer(
         session_id=session_id,
         user_text=user_query,
         assistant_text=final_answer,
         project_id=project_id,
         set_id=set_id,
+        source_documents=source_docs,
     )
 
     return _build_response_dict(
@@ -510,6 +519,7 @@ async def _branch_full_pipeline(
         multi_query_used=multi_query_used,
         rerank_used=rerank_used,
         source_docs_after=source_docs,
+        turn_id=turn_id,
     )
 
 
@@ -544,6 +554,7 @@ async def _branch_full_pipeline_stream(
     )
     contextualized_query = rewrite_out.get("contextualized_query", user_query)
     query_rewritten = bool(rewrite_out.get("was_rewritten"))
+    rewriter_skip_reason = rewrite_out.get("skip_reason")  # CONTEXT-FIX 2026-05-29
 
     # Upgrade 1 — Multi-Query + RRF (flag-gated). Reuse upstream hint if
     # the orchestrator already produced one.
@@ -644,12 +655,13 @@ async def _branch_full_pipeline_stream(
             final_answer = styled
             stylist_used = True
 
-    _dispatch_memory_writer(
+    turn_id = _dispatch_memory_writer(
         session_id=session_id,
         user_text=user_query,
         assistant_text=final_answer,
         project_id=project_id,
         set_id=set_id,
+        source_documents=source_docs,
     )
 
     response = _build_response_dict(
@@ -670,6 +682,7 @@ async def _branch_full_pipeline_stream(
         multi_query_used=multi_query_used,
         rerank_used=rerank_used,
         source_docs_after=source_docs,
+        turn_id=turn_id,
     )
     yield {"event": "done", "delta": None, "metadata": response}
 
@@ -819,9 +832,19 @@ async def _safe_rerank(
     candidate against the user's original question. Returns the reordered
     list; on any failure returns the input unchanged.
     """
-    if not _flag_enabled("RERANKER_ENABLED", "false"):
-        return source_docs
     if not source_docs or len(source_docs) <= 1:
+        return source_docs
+    # Tier A1 cascade (2026-05-28) — cross-encoder pre-rerank (cheap CPU), runs before LLM rerank.
+    if _flag_enabled("CROSS_ENCODER_RERANK_ENABLED", "false"):
+        try:
+            from gateway.cross_encoder_rerank import cross_encoder_rerank
+            source_docs = await asyncio.to_thread(
+                cross_encoder_rerank, query=user_query, source_documents=source_docs,
+            )
+            logger.info("chain.cross_encoder_rerank.applied output=%d", len(source_docs))
+        except Exception as exc:
+            logger.warning("chain.cross_encoder_rerank failed: %s", exc)
+    if not _flag_enabled("RERANKER_ENABLED", "false"):
         return source_docs
     try:
         from gateway.reranker import rerank_source_documents
@@ -1115,13 +1138,32 @@ def _dispatch_memory_writer(
     assistant_text: str,
     project_id: Optional[int],
     set_id: Optional[int],
-) -> None:
+    turn_id: Optional[str] = None,
+    turn_type: str = "rag",
+    parent_turn_id: Optional[str] = None,
+    source_documents: Optional[list] = None,
+) -> Optional[str]:
     """Fire-and-forget Memory Writer (Agent 6).
 
     Never raises. Never awaits. Returns immediately.
+
+    Returns
+    -------
+    str | None
+        The ``turn_id`` actually attached to this turn pair. When the
+        caller passes ``turn_id=None`` we mint a fresh UUID4 here so the
+        response builder can echo it back to the HTTP client without
+        waiting for the background write to complete.
     """
     if not session_id or not assistant_text:
-        return
+        return turn_id
+    # Phase 0 — mint a stable turn_id synchronously. Generated here so the
+    # value flows back into the response payload before the background
+    # writer has finished persisting. Caller passes None on the normal
+    # /query path; Deep Dive passes its own pre-allocated id.
+    if turn_id is None:
+        import uuid as _uuid_mod
+        turn_id = str(_uuid_mod.uuid4())
     try:
         from agentic.memory.writer import MemoryWriter
 
@@ -1134,10 +1176,15 @@ def _dispatch_memory_writer(
             assistant_text=assistant_text,
             project_id=project_id,
             set_id=str(set_id) if set_id is not None else None,
+            turn_id=turn_id,
+            turn_type=turn_type,
+            parent_turn_id=parent_turn_id,
+            source_documents=source_documents,
         )
     except Exception as exc:
         # Writer failure must NEVER affect the user response.
         logger.warning("chain.memory_writer dispatch failed: %s", exc)
+    return turn_id
 
 
 # ---------------------------------------------------------------------------
@@ -1220,6 +1267,168 @@ async def _iter_to_async(gen: Any) -> AsyncIterator[str]:
         yield chunk  # type: ignore[misc]
 
 
+# ---------------------------------------------------------------------------
+# Citation-grounding filter (v3.2)
+#
+# Client feedback (2026-05-12): "list of reference drawings / specs / email /
+# meeting should be precise or concise and should not give big list to go
+# through to verify". The agent was returning the full deduped retrieval set
+# (10-17 docs) even though the synthesized answer only cited 2-3 of them.
+#
+# This filter inspects the final answer text, extracts anchor tokens
+# (sheet numbers like "A-101", CSI section numbers like "32 9300", capitalized
+# section names like "PLUMBING FIXTURES", quoted phrases, page refs), then
+# scores each source_doc against those anchors. Only docs that the answer
+# actually grounded against are kept, capped at MAX_GROUNDED_SOURCES.
+#
+# Safety net: if zero docs survive (e.g. the LLM didn't cite any anchor
+# cleanly), keep MIN_FALLBACK_SOURCES from the top of the original ranked list
+# so the UI never shows an empty citation panel.
+# ---------------------------------------------------------------------------
+
+# Sheet-number pattern: A-101, CD-101, E-602, M-201a, S-101, RCP-01
+_SHEET_NUM_RE = re.compile(r"\b[A-Z]{1,4}-\d{1,4}[A-Za-z]?\b")
+# CSI section: "32 9300", "15 4000", or 6-digit "220500"
+_CSI_NUM_RE = re.compile(r"\b\d{2}\s\d{2,4}\b|\b\d{6}\b")
+# All-caps phrases of >=2 words (drawing/section titles): "PLUMBING FIXTURES"
+_CAPS_PHRASE_RE = re.compile(r"\b[A-Z]{3,}(?:\s+[A-Z]{2,}){1,5}\b")
+# Quoted phrases the LLM uses to cite
+_QUOTED_RE = re.compile(r'"([^"]{4,80})"')
+# Single all-caps word (single-word section names): "PLUMBING", "ELECTRICAL"
+_CAPS_WORD_RE = re.compile(r"\b[A-Z]{4,}\b")
+
+
+def _extract_anchors(answer_text: str) -> Dict[str, set]:
+    """Pull citation anchors from a final answer.
+
+    Returns a dict with keys: sheet_nums, csi_nums, caps_phrases, quoted,
+    caps_words — all lowercased/normalized sets for cheap membership tests.
+    """
+    if not answer_text:
+        return {
+            "sheet_nums": set(), "csi_nums": set(),
+            "caps_phrases": set(), "quoted": set(), "caps_words": set(),
+        }
+    return {
+        "sheet_nums": {m.upper() for m in _SHEET_NUM_RE.findall(answer_text)},
+        "csi_nums": {m.strip() for m in _CSI_NUM_RE.findall(answer_text)},
+        "caps_phrases": {m.upper() for m in _CAPS_PHRASE_RE.findall(answer_text)},
+        "quoted": {m.lower() for m in _QUOTED_RE.findall(answer_text)},
+        "caps_words": {m.upper() for m in _CAPS_WORD_RE.findall(answer_text)},
+    }
+
+
+def _score_doc_grounding(doc: dict, anchors: Dict[str, set]) -> float:
+    """Compute how strongly a source_doc is cited by the answer."""
+    if not isinstance(doc, dict):
+        return 0.0
+    score = 0.0
+
+    # Defensive str-coercion: occasionally fields like csi_division come back
+    # as dicts (e.g. structured CSI tagging) or None. Coerce everything to
+    # a plain string before any .strip()/.upper() so the filter never crashes
+    # on a single anomalous doc.
+    def _s(v: Any) -> str:
+        if v is None:
+            return ""
+        if isinstance(v, str):
+            return v
+        return str(v)
+
+    drawing_name = _s(doc.get("drawing_name")).upper().strip()
+    pdf_name = _s(doc.get("pdf_name")).upper().strip()
+    csi_div = _s(doc.get("csi_division")).strip()
+    drawing_title = _s(doc.get("drawing_title")).upper().strip()
+    display_title = _s(doc.get("display_title")).upper().strip()
+    text_excerpt = _s(doc.get("text_excerpt")).lower()
+
+    # Sheet number match (+3) — strongest signal
+    for sheet in anchors["sheet_nums"]:
+        if sheet and (sheet in drawing_name or sheet in pdf_name
+                      or sheet in display_title):
+            score += 3.0
+            break
+
+    # CSI section number match (+3)
+    for csi in anchors["csi_nums"]:
+        if csi and (csi in csi_div or csi in drawing_name
+                    or csi in pdf_name):
+            score += 3.0
+            break
+
+    # Drawing/section title match (+2) — full caps phrase
+    for phrase in anchors["caps_phrases"]:
+        if phrase and (phrase in drawing_title or phrase in display_title):
+            score += 2.0
+            break
+
+    # Quoted phrase appears in text excerpt (+1)
+    if text_excerpt:
+        for quote in anchors["quoted"]:
+            if quote and quote in text_excerpt:
+                score += 1.0
+                break
+
+    # Single all-caps word match against drawing_title (+1)
+    if drawing_title or display_title:
+        for word in anchors["caps_words"]:
+            # Skip generic words that match too aggressively
+            if word in {"AND", "THE", "FOR", "WITH", "FROM", "INTO", "OVER",
+                        "RAG", "PDF", "CSI"}:
+                continue
+            if (word in drawing_title) or (word in display_title):
+                score += 1.0
+                break
+
+    return score
+
+
+def _filter_grounded_sources(
+    answer_text: str,
+    source_docs: list,
+    max_sources: int = 5,
+    min_fallback: int = 3,
+) -> list:
+    """Filter source_docs to those actually cited by the answer.
+
+    Returns the same dict shape (no field changes). Pure ranking + truncation.
+    """
+    if not source_docs:
+        return source_docs
+    if not answer_text or not answer_text.strip():
+        # No answer to ground against — keep top-N from existing rank
+        return source_docs[:max_sources]
+
+    anchors = _extract_anchors(answer_text)
+    # If the answer has no anchors at all (very short factoid like "8 feet"),
+    # don't try to filter — keep top-N. Better to show too few than wrong ones.
+    if not any(anchors.values()):
+        return source_docs[:max_sources]
+
+    scored: list[tuple[float, float, int, dict]] = []
+    for idx, doc in enumerate(source_docs):
+        ground_score = _score_doc_grounding(doc, anchors)
+        retrieval_score = 0.0
+        if isinstance(doc, dict):
+            try:
+                retrieval_score = float(doc.get("score") or 0.0)
+            except (TypeError, ValueError):
+                retrieval_score = 0.0
+        # Sort key: grounding DESC, retrieval DESC, original index ASC
+        scored.append((-ground_score, -retrieval_score, idx, doc))
+
+    scored.sort()
+    grounded = [t[3] for t in scored if -t[0] >= 1.0]
+
+    # Safety net: if nothing scored, keep min_fallback from the top of the
+    # original list (preserves prior behavior for queries the LLM answered
+    # without citing anchors verbatim).
+    if not grounded:
+        return source_docs[:max(min_fallback, 1)]
+
+    return grounded[:max_sources]
+
+
 def _build_response_dict(
     *,
     user_query: str,
@@ -1239,6 +1448,9 @@ def _build_response_dict(
     multi_query_used: bool = False,
     rerank_used: bool = False,
     source_docs_after: Optional[list] = None,
+    turn_id: Optional[str] = None,
+    turn_type: str = "rag",
+    parent_turn_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Assemble a response dict mirroring ``Orchestrator._build_response``.
 
@@ -1297,6 +1509,11 @@ def _build_response_dict(
             "falling back to raw chain source_docs", exc,
         )
 
+    # Capture full pre-dedup retrieval set for transparency (Phase 2026-06-02 fix).
+    # Returned to caller as `all_retrieved_sources` so client can see every drawing
+    # that contributed to the answer — fixes the "5 dupes of same PDF" feedback.
+    source_docs_pre_dedup = list(source_docs) if source_docs else []
+
     # Dedup source_documents by stable identity. Same proven logic as v3.0:
     # prefer entries that carry bbox/text excerpt (citation-ready). Without
     # this, the same PDF appears 5-20× because drawing-level + fragment-level
@@ -1308,14 +1525,14 @@ def _build_response_dict(
         for doc in source_docs:
             if not isinstance(doc, dict):
                 continue
-            # Identity priority: pdf_name > drawing_name > file_name > s3_path
-            key = (
-                doc.get("pdf_name")
-                or doc.get("drawing_name")
-                or doc.get("file_name")
-                or doc.get("s3_path")
-                or ""
-            )
+            # Identity tuple: include BOTH pdf_name and drawing_name so different
+            # drawings inside the same master PDF stay separate (Phase 2026-06-02 fix).
+            # Page included as third axis for multi-page drawings.
+            _pdf  = (doc.get("pdf_name") or doc.get("file_name") or doc.get("s3_path") or "").strip()
+            _draw = (doc.get("drawing_name") or "").strip()
+            _page = doc.get("page") or doc.get("page_count") or 0
+            key = (_pdf, _draw, _page) if (_pdf or _draw) else ""
+
             if not key:
                 no_key_docs.append(doc)
                 continue
@@ -1336,6 +1553,41 @@ def _build_response_dict(
         if before != len(source_docs):
             logger.info(
                 "chain.dedup: source_documents %d -> %d", before, len(source_docs),
+            )
+
+    # ----- Citation-grounding filter (v3.2) -----
+    # Trim source_documents to only those the final answer actually cites,
+    # capped at MAX_GROUNDED_SOURCES (default 5). Preserves the full deduped
+    # list under debug_info.source_documents_all for audit.
+    source_docs_all_pre_filter: list = list(source_docs)
+    grounded_filter_used = False
+    if _flag_enabled("GROUNDED_CITATIONS_ENABLED", "true") and source_docs:
+        try:
+            max_cap = int(os.getenv("MAX_GROUNDED_SOURCES", "5"))
+        except (TypeError, ValueError):
+            max_cap = 5
+        try:
+            min_fallback = int(os.getenv("MIN_FALLBACK_SOURCES", "3"))
+        except (TypeError, ValueError):
+            min_fallback = 3
+        before_filter = len(source_docs)
+        try:
+            source_docs = _filter_grounded_sources(
+                answer_text=answer,
+                source_docs=source_docs,
+                max_sources=max_cap,
+                min_fallback=min_fallback,
+            )
+            grounded_filter_used = True
+            if before_filter != len(source_docs):
+                logger.info(
+                    "chain.grounded_filter: source_documents %d -> %d "
+                    "(cap=%d, fallback=%d)",
+                    before_filter, len(source_docs), max_cap, min_fallback,
+                )
+        except Exception as exc:
+            logger.warning(
+                "chain.grounded_filter failed (%s); keeping deduped list", exc,
             )
 
     # Resync s3_paths from the deduped source_documents AND filter out
@@ -1364,6 +1616,46 @@ def _build_response_dict(
         resynced_s3.append(s)
     s3_paths_normalized = resynced_s3
 
+    # ----- Resync sources[] from filtered source_documents (v3.2) -----
+    # Bug 1 (Reference Source Bugs): the public sources[] list was returning
+    # the raw, unfiltered agent_result.sources — a mix of 55+ hashed pdf_names
+    # + display titles + sheet numbers + "COVER SHEET"-style strings, all
+    # contradicting the answer's actual citations. Derive sources[] from the
+    # post-grounded-filter source_documents so there is ONE source of truth.
+    def _label_of(sd: dict) -> str:
+        for k in ("display_title", "drawing_name", "drawing_title",
+                  "pdf_name", "file_name"):
+            v = sd.get(k)
+            if v is None:
+                continue
+            s = v if isinstance(v, str) else str(v)
+            s = s.strip()
+            if s:
+                return s
+        return ""
+
+    if source_docs:
+        resynced_sources: list[str] = []
+        seen_keys: set = set()
+        for sd in source_docs:
+            if not isinstance(sd, dict):
+                continue
+            label = _label_of(sd)
+            if not label or label in seen_keys:
+                continue
+            seen_keys.add(label)
+            resynced_sources.append(label)
+        sources = resynced_sources
+
+    # v3 bbox enrichment — populates bbox_pt / bbox_px / page_width_pt /
+    # page_height_pt / text_blocks on each source_doc from v3 Mongo
+    # collections. Safe no-op for legacy projects.
+    try:
+        from gateway.orchestrator import _enrich_v3_with_bbox
+        _enrich_v3_with_bbox(source_docs)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("chain: v3 bbox enrich failed (%s); continuing", exc)
+
     return {
         # core answer
         "query": user_query,
@@ -1388,6 +1680,10 @@ def _build_response_dict(
         # sources (normalized: s3_path, file_name, display_title, download_url,
         # pdf_name, drawing_name, drawing_title, page) — matches v3.0 frontend contract.
         "source_documents": source_docs,
+        # Phase 2026-06-02 fix: full pre-dedup, pre-filter retrieval set so the
+        # client can see every drawing that contributed to the answer (addresses
+        # "5 copies of same PDF" / "missing related drawings" feedback).
+        "all_retrieved_sources": source_docs_pre_dedup,
         "sources": sources,
         "s3_paths": s3_paths_normalized,
         "s3_path_count": len(s3_paths_normalized),
@@ -1396,6 +1692,12 @@ def _build_response_dict(
             "agentic_steps": steps,
             "agentic_cost_usd": cost,
             "agent_error": agent_error,
+            # v3.2 grounded-citation audit fields
+            "grounded_filter_used": grounded_filter_used,
+            "source_documents_pre_filter_count": len(source_docs_all_pre_filter),
+            "source_documents_post_filter_count": len(source_docs),
+            # Phase 2026-06-02 fix: how many sources were retrieved before dedup
+            "all_retrieved_sources_count": len(source_docs_pre_dedup),
         },
         # timing + identity
         "processing_time_ms": elapsed_ms,
@@ -1420,4 +1722,11 @@ def _build_response_dict(
         # Agent 0.5 telemetry (None when classifier flag off / errored)
         "answer_shape": (answer_shape or {}).get("shape"),
         "target_length_chars": (answer_shape or {}).get("target_length_chars"),
+        # v3.3 — turn identity (Phase 0). Stable UUID per (user, assistant)
+        # turn pair. UI passes turn_id back on Deep Dive trigger. ADDITIVE
+        # only — old clients ignore. turn_type discriminator stays "rag" on
+        # normal /query path; "deep_dive" on the Deep Dive endpoint.
+        "turn_id": turn_id,
+        "turn_type": turn_type,
+        "parent_turn_id": parent_turn_id,
     }

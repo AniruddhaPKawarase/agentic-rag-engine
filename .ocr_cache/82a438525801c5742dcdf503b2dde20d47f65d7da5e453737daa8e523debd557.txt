@@ -1,0 +1,626 @@
+1 2 3 4 5 6
+RRO ef CE: LANTZ
+fest” provbe Fowler For Low VOLTAGE BoLLAROS roMLoW vacrAGe” " B 1. {Lif} DENOTES LIGHTING SEQUENCE OF OPERATIONS. REFER TO SHEET E-600 BOGGIO /
+q TRANSFORMER, LV-1, IN OUTDOOR STORAGE ROOM. D FOR LIGHTING CONTROL SEQUENCE OF OPERATIONS SCHEDULE.
+PP PP PPP PP PP PPP POPPI" 2. REFER TO SHEET E-600 FOR LUMINAIRE SCHEDULE.
+3. ALL LUMINAIRES IN THE PATH OF EGRESS TAGGED WITH AN 'E' AT THE END. ARC H ] T ECTS
+SHALL BE ON AT 100% AT ALL TIMES.
+14. THESE DOCUMENTS DO NOT CONVEY EVERY WIRE THAT MUST BE INSTALLED
+AND EVERY EQUIPMENT CONNECTION THAT MUST BE MADE FOR THE LIGHTING
+CONTROL SYSTEM. BASED ON THE PERFORMANCE REQUIRED OF THE SYSTEM, Associated with:
+AS PRESENTED IN THESE DOCUMENTS, THE CONTRACTOR AND SYSTEM
+MANUFACTURER/VENDOR ARE SOLELY RESPONSIBLE FOR DETERMINING ALL
+EQUIPMENT, WIRING, AND PROGRAMMING REQUIRED FOR A COMPLETE AND
+OPERATIONAL SYSTEM. PROVIDE CONTACTOR PANELS CONTROLLED VIA THE 7600 E ORCHARD ROAD
+CAMPUS BUILDING AUTOMATION SYSTEM TO CONTROL ALL SITE AND > | M EG GREENWOOD VILLAGE, CO 80111
+CORRIDOR LIGHTING. PROVIDE A SEPARATE DISTRIBUTED CONTROL PANEL P: 303.796.6000
+E FOR AMENITY SPACES. PROVIDE LIGHTING CONTROL PANELS AND ALL. Ee wewimegcorp.com
+REQUIRED POWER SUPPLIES,CONTROLLERS, SENSORS, RELAYS, SWITCHES, HO Eee Ree a Foor enna nies one One COPYRIGHTS,
+DEVICES, WIRING, ETC. NECESSARY TO PERFORM THE LIGHTING CONTROL ANDIOR DATA ARE THE EXCLUSIVE PROPERTY OF IMEG CORP. AND.
+SEQUENCE OF OPERATION AS DEFINED ON THE PLANS AND SPECIFICATIONS. ‘SHALL NOT BE USED OR REPRODUCED FOR ANY OTHER PROJECT
+CONTRACTOR IS RESPONSIBLE FOR CONFIRMING THAT ALL COMPONENTS AND. ESCO eaoee cone NO reRTICEATONOe
+LUMINAIRES INTEROPERATE AS A SINGLE SYSTEM FOR EACH ZONE.
+5. PROVIDE AN UL924 LISTED ETD DEVICE IN ALL SPACES WHERE EMERGENCY o 4 2 3
+¢ CONTROLLED, PROVIDE AN EMERGENCY CIRCUIT 70 ETD DEVICE AND CIRCUIT fer SENOS PrOLeCT eT
+= TO INTERFACE WITH LOCAL LIGHTING CONTROL. PROVIDE UNSWITCHED
+= SENSE LEG FROM PANEL SERVING NORMAL POWER LOCAL LUMINAIRES. FOR
+8 LIGHTING LOAD LESS THAN 400W PROVIDE 2AMP RATED ETD DEVICE. LOADS.
+a GREATER THAN 400W SHALL BE PROVIDED WITH 20AMP RATED ETD DEVICE.
+3 16. PROVIDE SEPARATE BRANCH CIRCUIT TO SUPPLY POWER TO THE HOIST WAY, wv
+a PIT LIGHTING. LIGHTING SHALL NOT BE CONNECTED TO THE LOAD SIDE OF ANY
+= 0.8) D 4 { D (c) B GFCI DEVICE. MOUNT PIT LUMINAIRES VERTICALLY 48” FROM TOP OF PIT OR .
+3 . BELOW PIT CEILING. REFER TO ELEVATOR MANUFACTURER FOR EXACT
+= LOCATION. v
+= 7. COORDINATE LUMINAIRE LOCATIONS AND MOUNTING WITH ALL EQUIPMENT,
+2 | 8. WHERE LUMINARE GUANTITIS OR LAYOUT DICER BETWEEN ELECTRICAL
+3 : LIGHTING PLANS AND ARCHITECTURAL REFLECTED CEILING PLANS, HIGHER ©
+Z | | | | | | QUANTITY SHALL TAKE PRECEDENCE. CONTRACTOR SHALL CONFIRM QUANTITY
+3 AND LAYOUT WITH DESIGN TEAM. YI Zz
+g Mm" ~S_ | SS ‘hy. mt < Ly ?, 9. PROVIDE (2#10, CU+#10G, CU)3/4"C FOR ALL LIGHTING CIRCUITS WHERE THE
+3 oo TS oe Seal om =. = y~™~ VOLTAGE DROP EXCEEDS 3%. —_
+i a) | /— - eo So aa eres on ee eer, eH
+2 \ l \ | I Ly, Ww We AD | XC MANUFACTURER'S RECOMMENDATIONS AND REQUIREMENTS. PROVIDE < Q > =
+z N Ly, 4 ‘APPROPRIATE SENSORS TO COVER AT MINIMUM 90% OF THE SPACE a _—
+2 | | | | | Se NS v INDICATED. \ \ J a
+2 11. CIRCUIT ALL EXIT SIGNS AND "EM" FIXTURES TO NEAREST LIFE SAFETY LIGHTING <x O N
+2 IRCUIT. \ — OQ >
+: 1 Vi Y INO 2°
+2 (10)— - — wht zee 2 ee a YO lg g ee an
+z (10) an Sas BE wn ine Ye, + hiplife ze % y xy Y a =
+Be Ae tee se Ve SEER ze sy ON wee Ve Vwo/ Ae | ZNZ z2
+5 A = <li> \S de = A Kah Sa PRGA aN SS S LYE SSO al [Lee Me Y yi OES YA ALES”
+i RPC Ot Se oe ERT IDS oS wee FR ee ey Ota Be
+3 BO KY S( KO IS Nini eS ESI RISA SRSA AIS AS See i EI NNR ETO Rs Do Reef
+rie ce 3, SO ERE eo ee | a ALG Es
+g me Te Tae Ee a ee WTKR TR RENE NSN CRN NRS  | RA —
+g 9) ANEREE 1 RAINIER NEN SRN RE eit AY fo Yea ae
+j (9 }-— : pps a sero Pre al Wee cae - 2 on Kage Lu 7 sa
+2 a . . 5 ° . on : . ve ° ° 3. | . | ~ Sew
+; 8 oop. Wo | : vO ° g 9 | ci] ore * a , ' : : ies wae 6a ee . A Qe LU “
+| peel am : : a | % ol : Re ye ; - : : : pies eal XN = LL oO ~
+: ate oes ASS che ogple is Rss PAD Lu
+al I: ma - Ce ee Je eh ee
+z oe : fe gee 6 Ios, ‘ pg ao - po { : : 1 Lets Os : Pg —
+i “ GL Se | |, Pee Te Re “”
+ol ° | nena I: : wee | oe mo ; | Lge et baa) weer : . Goast ° 6 i ; ee \ tow l J J
+é Soe | Hs : oles | ft Soe . ae 7 eye a} ee poe hes os a8 BAYS * a Doe.
+: = ers a =o |e POs l : pee a LB. SEWN w
+2 i H LoS: i | lor | Sy ‘ vi .| Freese [os * JP hosted : : Hy] YA
+5 , T | 5 orni-0 fe ; é bog 6 e a. oof | : | A
+5 | te | Le oes 3 é | a we 5 z| é foes . a : : eS b
+z (8) _ ie “Lp eo o— = Nana thee | Se oe [: : ee = = — “ Po Spee oe eee fe El: “eee al _ Revisions:
+: ee = [ tet =| Es Ebon ele tet Er coe TET PT ee ey Fn Pe | RA oe =
+z oem | mons is igi eink eget rae ey2-00 a simon ae 2 ta ma apron rs aman rt Figen ror “Eira al mo eyes bee! ie Lk: ae I | oo Ei ie y [em No. Daie | ——Desoinion
+2 peda . e O ny djs | a SiS last [ooz [2026.02.02 [FOR CONSTRUCTION SET |
+; — Ee SP Tsp af] [ewer pe PE ly pfs ete bp EE Pe PT Eh Eye Ek pf) oer dP ee if SEH a ml . Z * LI RES - Pp
+BG 5 sane —___ [Serion a errengT 5 — ee ee ls : | SINT cf LW
+i Ey] a on ce | I Rift IE ls ern ceed | so : POR. es a
+& : | ca yews: Sado | 78 ? | : E [| seven | | Poo Be Et
+2 oS, femal pace I He pel Joe 8 ® , | f= \fot s BP RE bu, : 6 si Oh] ee a a |
+3 | I | aie Hops po | | : Hoey 2 selon fete | Hl | Sg SE | Lis op
+5 ap je PRESS Spe | ee Weel [oe poo [esse ese ; wh] Ge a
+5 Se TSE Se et pe ee Aor Se Sy Go er — ae ——— Te “HET ee cre te hl -— a
+ee ay a ee bebe ee 2th =
+: pqs De ot | wate i iro Ue fee ORs” S | wigg So eh on sage fee ee ae — te a
+3 i ‘ : . : . _ | AOB7-SF : , : . . . & | —-
+| oven N - ge ie ee ahs oo Nas i |) aR aes TG Pg aE no 8 PABA
+z © 3 : : : . : : : . | f be . -
+8 . a | : : on . ’ : : : : tt [u-203] . . Ed 1 | 4 ia Project Status:
+3 : ours o | . a : : ‘ ° ° Ios : “ P : | : a a ide: | | : ‘ s ee;
+= : of wine . | : | 3 Brug: 5 oo ; , Le : : ane : : ce T Ts - fF ey ze gg issue / status date:
+3 Tall co : Le fone a : ' Ol Be oper ars | PR] a ° en Ses] ib | oa ISSUE FOR BID JULY 25, 2025
+ee a a —— | _ | = ee eee ee a vo = as o. Po ety CH NI 1/2 _ —_—aeo7n—_eon—-_ srr
+5 (s ) - | =H Se Co aT 4 : oP —F: arena TT 1 : cee || ~ 4] See ee} ISSUE FOR PERMIT MAY 12, 2025
+i | Cpe och yy he ec Pee ccd Ps ea | Er “SESCNDEVEoPWENT FEBRUARY ae
+3 -i [ee ee (ea ee ee ee ee | . we I) jouer} |) je | | . (KS SOURS  SCHEMATICDESIGNS«UNTQVEMIREERO@ Dd
+a fey Tr wenn fen WATT ee BEET OUD lle EEO : | | as } ao ee OY
+5 ee LEP Pe A ee en ee Te NETL I Pa IE WEE eA Seat
+5 4 ODI NO NITY I ON ENED fo YT revere en | TT Bef ye ee . CIC? C-) —
+f Po ae le Sg en be =a TT Pa oT LS TTT as
+~ LTT a TT \ . k |
+5 Pipe tye et te es ott tty tt et eet oT TT PT TT PT TT TT Tigi ltel TTT Soe 2 | cpl waa atn |
+g Dy PD; D: 0.9. Ls51}11O) ; | S | See |
+: RPA RRR cn
+7° PTT TTT Pry dyer RE ae SRS ee SS en [Prion WESEP ert || 8
+g oo ee FEO COS POSEN [RRO Gta 09952] wee ee we ewe bye SiR ale reid 4
+3 ives ee TE Ral hia CR ee AB Saeesuuweas w]e rl 4 >< tii |
+3 “14 re ESM Ruth POE IO SL Ea =e pcg’ LS we Ir . Sieaaas a ~.
+3 Pf La fasb9 “oummee ag eee sen as wy Pro) le -j- ‘tigeve-oond| “7 ut
+: a Ease aa cot cece a eg [Sof oS ero
+= = SST ee ee | RE Cl ee a]. tee fee [ | | | Lt eT ]
+3 Sey Pfe eee ee eek Fe eee NU RN Mv wy. | 8 2 [Ed |
+2 SS SSS woe a a a O A wa es BS, | Sas | wee ee ee ww . SZ s3 .
+: SSS eee mmboa| fcc EEPR  p tee NI Se od SE
+i ase wy Se ee te ccc aS ae 7 Ye a
+; SR OS ce el aig ( Pf) Op ae =| KE
+a === || pecs Sate Cis RO ee Ol ees | WO oe Bose ce RE oo pe [: =| | WS JS
+: eR ccc [| Jo TAGLINE es,
+3 Cees ree | tng ae Pe A ee ft | mee tee cece eg oe es ange fis estos fy noes) ees 5 SRSRERI
+i See. COO Oe Saat ccc ee FEN one tbe ro. seen
+3 | | | ee ar | | al OO) Pee SSS S| Hee BIS eee phd | . 2 | ret | : So aay” WARES PROP
+: CO Re Ry ec Pe ope ee ED se. fee [OZ ‘ | Ree
+Z _ ren | Ton TT ea PrN el ge tg | =H He ea = IOS
+; (2)— - ISS TSE ESE [RPS epee} —— ne
+2 OND | OHO er es TIN or rior EEN Sy sega Bre rele || ema | Fee ° | Pl Ss | | %, ie : LBA Pro ject # get
+5 AAPA RATATAT SOR I PPA PPAPABRL II het Te Onn OLRM | |, Sone - ‘ Drawn be
+: ERAT SORE SB CIO te ERE POR omy Jot bed) OCH home tem ere | | | T Oh te ra aie | ee a} “Checked by CAB
+g IS ATE FC ga A oe OG an IRR oe BO ISIS Soa EI al PLC apd ter} anh “| TL opel «| : : :
+3 SS EEO DRESE te Oya SO Oy OSES BP S CR Re GORE Oe ee Sc/EMO.200 i |
+2 ay POST SSE XS SOI OCT IK RO Ck CRESS SOO IPS AS CECE ODS ROC ONT TT ere | po ed Ne
+z — SS SS SS eee oS ————t — —_ = = lame:
+8 ‘
+: EE TR NENTS EER ESE EES i
+bz. CSCO SIOCOCOCOECSE ECOG 6:2:8:8:8:8:68'S'8'0:9:0:0:0:0:0: WAD LIGHTING PLAN - LEVEL 2
+go hv pe pe C) / | ;
+ie Vv - ZONE 1
+3S —Y) (-)
+2g az S nn 5 a
+i g p | lend, NO l YY Sheet Number:
+2Nn .
+2
+gS LIGHTING PLAN - LEVEL 2 - ZONE 1
+Ba 118" = 1-0"
+gOe
+22a 1 2 3 4 5 6
+KEYNOTES
+SHEET NOTES
+LANTZ
+Boa,
+{L##} DENOTES LIGHTING SEQUENCE OF OPERATIONS. REFER TO SHEET E-600
+FOR LIGHTING CONTROL SEQUENCE OF OPERATIONS SCHEDULE.
+REFER TO SHEET E-600 FOR LUMINAIRE SCHEDULE.
+BOGGIO/
+ALL LUMINAIRES IN THE PATH OF EGRESS TAGGED WITH AN 'E' AT THE END
+ARCHITECTS
+THESE DOCUMENTS DO NOT CONVEY EVERY WIRE THAT MUST BE INSTALLED
+CONTROL SYSTEM. BASED ON THE PERFORMANCE REQUIRED OF THE SYSTEM,
+Associated with:
+7600 E ORCHARD ROAD
+OPERATIONAL SYSTEM. PROVIDE CONTACTOR PANELS CONTROLLED VIA THE
+‘SUITE 250.8
+CAMPUS BUILDING AUTOMATION SYSTEM TO CONTROL ALL SITE AND.
+GREENWOOD VILLAGE, CO 80111
+CORRIDOR LIGHTING. PROVIDE A SEPARATE DISTRIBUTED CONTROL PANEL
+IMEG
+: 303,796.
+FOR AMENITY SPACES. PROVIDE LIGHTING CONTROL PANELS AND ALL
+wwwimegcorp.com
+REQUIRED POWER SUPPLIES,CONTROLLERS, SENSORS, RELAYS, SWITCHES,
+IMEG CORP. RESERVES PROPRIETARY RIGHTS, INCLUDING COPYRIGHTS,
+DEVICES, WIRING, ETC. NECESSARY TO PERFORM THE LIGHTING CONTROL
+ANDIOR DATA ARE THE EXCLUSIVE PROPERTY OF IMEG CORP. AND
+TO THIS DRAWING AND THE DATA SHOWN THEREON. SAID DRAWING
+SEQUENCE OF OPERATION AS DEFINED ON THE PLANS AND SPECIFICATIONS.
+SHALL NOT BE USED OR REPRODUCED FOR ANY OTHER PROJECT
+CONTRACTOR IS RESPONSIBLE FOR CONFIRMING THAT ALL COMPONENTS AND.
+WITHOUT THE EXPRESS WRITTEN APPROVAL AND PARTICIPATION OF
+IMEG CORP. ©2023 IMEG CORP.
+PROVIDE AN UL924 LISTED ETD DEVICE IN ALL SPACES WHERE EMERGENCY
+°
+1
+3
+LIGHTING TAGGED WITH AN 'E' AT THE END IS SHOWN AND IS LOCALLY
+REF. SCALE IN INCHES
+PROJECT #22002578.09
+CONTROLLED. PROVIDE AN EMERGENCY CIRCUIT TO ETD DEVICE AND CIRCUIT
+TO INTERFACE WITH LOCAL LIGHTING CONTROL. PROVIDE UNSWITCHED
+SENSE LEG FROM PANEL SERVING NORMAL POWER LOCAL LUMINAIRES. FOR
+LIGHTING LOAD LESS THAN 400W PROVIDE 2AMP RATED ETD DEVICE. LOADS.
+GREATER THAN 400W SHALL BE PROVIDED WITH 20AMP RATED ETD DEVICE.
+PROVIDE SEPARATE BRANCH CIRCUIT TO SUPPLY POWER TO THE HOIST WAY
+PIT LIGHTING. LIGHTING SHALL NOT BE CONNECTED TO THE LOAD SIDE OF ANY
+GFCI DEVICE. MOUNT PIT LUMINAIRES VERTICALLY 48” FROM TOP OF PIT OR
+BELOW PIT CEILING. REFER TO ELEVATOR MANUFACTURER FOR EXACT
+e8)
+04)
+LOCATION.
+COORDINATE LUMINAIRE LOCATIONS AND MOUNTING WITH ALL EQUIPMENT,
+DEVICES, CONDUIT, AND DUCTS.
+WHERE LUMINAIRE QUANTITIES OR LAYOUT DIFFER BETWEEN ELECTRICAL
+LIGHTING PLANS AND ARCHITECTURAL REFLECTED CEILING PLANS, HIGHER
+QUANTITY SHALL TAKE PRECEDENCE. CONTRACTOR SHALL CONFIRM QUANTITY
+AND LAYOUT WITH DESIGN TEAM.
+NA
+o“PJ_— ™”
+wn,
+9.
+PROVIDE (2#10, CU+#10G, CU)3/4"C FOR ALL LIGHTING CIRCUITS WHERE THE
+—
+“ha
+VOLTAGE DROP EXCEEDS 3%.
+a
+O-
+10.
+‘SENSORS SHOWN FOR REFERENCE ONLY. REFER TO LIGHTING CONTROL
+"
+SEQUENCE OF OPERATIONS. PROVIDE QUANTITY, LOCATE, AND INSTALL PER
+MANUFACTURER'S RECOMMENDATIONS AND REQUIREMENTS. PROVIDE
+‘APPROPRIATE SENSORS TO COVER AT MINIMUM 90% OF THE SPACE
+Ay
+INDICATED.
+CIRCUIT ALL EXIT SIGNS AND "EM" FIXTURES TO NEAREST LIFE SAFETY LIGHTING
+IRCUIT.
+> O
+ke
+whet
+Vi
+_
+\
+Vv;
+vy
+y
++=
+NY
+eae
+aa
+Why,
+I
+x,
+\ | py, y Je
+Vy, Xu, WIRE
+Wy,
+12t
+th A Sy,
+N
+wth ge
+"i
+_ ey we ys a
+OO
+A <.
+SS
+=
+.
+eT]
+w®
+S71
+ee
+YN
+7
+iv
+Ws,
+\-
+\v
+Let
+~
+Lae
+Ry
+Ne
+A SN
+|
+:
+Eh INS
++049 +
++
++ 8+ 8+ R+R+
+++ Re R+ B+ B+ B+
++848 4+ Ba +
++84
+LN
+— 4
+——
+4
+rnb
+T
+aT
+ra Ft
+Te
+@
+Q.
+U
+dl
+o
+F7.0
+Faz.
+6:
+4 BAYS.
+BAYS:
+pat
+x5
+1359 SF
+Le
+1495 SFO
+E72
+1325 SF
+(v2
+3.5 BAYS.
+1258 SF
+208}
+H3.0
+=r
+ze
+ies
+3.5 BAYS
+1297 SF
+ivan
+°.
+saa
+sue
+a (he
+‘SCuPHza4
+Bohs
+ret
+yPH2A-4
+said
+PHOAA.
+sa
+Revisions:
+SCUPHZA4,
+_—
+es
+@)
+{EI
+FABEM2-201NL-—}—F1yPHi28-4—}
+| EipPH2a-4—}— B1E/EM2-20NL—) FarPri2a 4
+FapHas |} ENPH2A-«¢RIDOR- ~FAB/EM2-20/NL;
+jE WPH2A
+F1EEM2-200NL,
+EYPHOA4
+EupHea4
+E1E/EM2-201N
+EUPHOA4
+EUPH2A-4
+FHEJEM2-201NL:
+fips) surat
+Or
+| Pi ere ena -200NL-——} EY
+Item | No
+Date
+(0 |
+© *fac2da}
+{LC}
+mx.)
+{Lt}
+EyPH2A4
+/@
+FAB/EM2-200Ni_
+Description
+DUPHOAS
+Ext
+\ScVPHZA4
+ASI
+1002
+2026.02.02 |FOR CONSTRUCTION SET
+° | HL
+Lome aie
+=" SCuPHA4
+‘SCUPHOA-4.
+‘SCPH2A-4
+DI/PH2A-
+0
+{LSE1}
+ut
+3 l
+EC/
+BL
+DF
+TaPHOA
+sSeeESO
+-
+2.
+Q
+1203)
+{f
+‘S1E/EM2-20 [
+‘S1E/EM2-20
+EYPHZA4,
+PIdToO
+| °
+—————
+2s)
+[es
+| {LS9}
+JN.
+Sto
+oy
+E
+0.
+©)
+YS
+G24
+ses
+JAN
+SCUPHIAS
+oe
+S BAYS
+b7.2
+{LS9}
+24
+ivan)
+3 BAYS
+9
+201
+ou
+| —EAB/EM2-20NL
+1087:SF
+H16.0
+SINPHA-A
+1086 SF,
+4.5 BAYS
+20088
+U2
+lUi209)
+1606 SF.
+(U-203}
+Project Status
+S"
+Dscuetizas
+Zan
+issue / status
+date:
+EVPHA4
+Ss).
+Lf
+Ty
+ISSUE FOR BID
+JULY 25, 2025
+12:
+ISSUE FOR PERMIT
+MAY 12, 2025
+(5)— -
+[oe
+FAPH2A-4)
+8
+DESIGN DEVELOPMENT
+FEBRUARY 03, 2025
+DimHeA-s|
+———
+aoe
+ae
+SCHEMATIC DESIGN
+NOVEMBER 08, 2024
+GO
+’
+oF
+FaPHen4
+Seal:
+jo —
+~ @-
+@.
+]
+[6
+ELVPHOA-4SORRIDE1E/EM2-201N. Si
+{LS51}
+204
+/
+ann
+(LSE2}
+VEM2-16
+236,
+IS
+srvensieR o1
+oot
+tia
+rid
+iva;
+ria
+“OUFDOGR ~
+wi
+TERRACE
+pote
+28-26
+-EAE/EM2-20/NL
+pit
+(4200;
+rs
+pt |
+(3)}— -
+wx,
+Ie
+BC
+iva,
+HB. 2
+H2B-26-
+PH2B-26.
+126.205
+PH2B-26|
+=,
+PH2B-26
+=o
+EYPHA4
+Project Info:
+Pr2e-26
+[PH2E
+FPH2B-26
+BA2
+pid -
+{| | | |
+2.5 BAYS,
+Hl
+So
+wit
+917 SF
+ql
+PH28.26
+wiNT |
+yw)
+O20
+rc
+PH2B.26.
+28-26.
+28-26:
+PH2B-26,
+<hy
+eypH2h4—||
+ISCHPHZA.4
+>
+IPH26-
+PH2-26:
+F] °
+Pf}
+RB1.
+ZONE 2
+07.2
+Vg
+H]
+mh
+W
+x
+ws
+PH2B-2
+6
+1087 SF
+Ox
+iff
+Pr2B.26"
+o:
+PH26-26
+PHOB-26,
+(236).
+~ @.
+EUPHOAG
+PHOB26
+SG
+Us
+oS,
+CB1.1
+re.
+VA @
+CG
+Z) WIN
+7]
+WIN,
+wr
+Koos
+LS)
+Pra 28
+‘SOZ/EM2-20|
+ay)
+F2E/EM2-200N
+EAP HOA
+F2PHAS
+-M2-20)N
+BA Project #
+2024.21
+DYPHOAAA
+}
+DYPHOAA
+My
+9:1" ptpHane
+leone
+inom”
+05/12/2025
+7)
+(LS 19}
+os
+D
+rawn by
+TMH
+vagy
+De
+{
+XY
+Xt
+capraas {LCT} ramizas
+f4c204}
+“lo
+2A4.
+Checked by: CAB
+col
+ef
+‘SO2/EM2-20
+hd
+nat
+wat
+Boa
+al
+ia
+—Tal
+Sheet
+Name:
+(4)}— -
++ B+ V+ P+ P+ V+ H+ P+ Re e+
++8+B+R+
+LIGHTING PLAN - LEVEL 2
+IX
+4%
+z
+- ZONE 1
+s
+we fe)
+Nw
+Sheet Number:
+E-321
+LIGHTING PLAN - LEVEL 2 - ZONE 1
+18" = 1-0"
+an
+2s

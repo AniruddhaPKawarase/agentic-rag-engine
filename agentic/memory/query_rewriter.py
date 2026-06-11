@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger("agentic_rag.memory.rewriter")
@@ -72,6 +73,21 @@ _ANAPHORA_MARKERS: tuple[str, ...] = (
     "they ",
     " he ",
     " she ",
+    " him ",
+    " her ",
+    " his ",
+    " hers ",
+    "their ",
+    "theirs ",
+    "the one",
+    "that one",
+    "those ones",
+    "such",
+    "the previous",
+    "earlier ",
+    "above",
+    "mentioned",
+    "described",
 )
 
 # When the LLM's output starts with these patterns it has produced
@@ -94,6 +110,33 @@ _REWRITER_MAX_TOKENS = 200
 _REWRITER_TEMPERATURE = 0.1
 _REWRITER_OUTPUT_MAX_RATIO = 3.0
 _HEURISTIC_MIN_QUERY_LEN = 30
+
+# v3.2 — Identifier-pattern guardrail.
+# Queries containing an explicit construction-document identifier are by
+# definition self-contained. The rewriter must NOT paraphrase them; doing so
+# (e.g. "provide me the drawings A-101?" -> "What are the details and
+# specifications included in drawing A-101?") changes the user's intent and
+# blows up retrieval scope from 1-3 docs to 50+. These patterns short-circuit
+# the rewriter regardless of any other heuristic flags.
+_IDENTIFIER_PATTERNS: tuple[re.Pattern, ...] = (
+    # Sheet numbers: A-101, CD-101, E-602, M-201a, S-101, RCP-01, GA-105
+    re.compile(r"\b[A-Z]{1,4}-\d{1,4}[A-Za-z]?\b"),
+    # CSI section numbers: "32 9300", "15 4000", or 6-digit "220500"
+    re.compile(r"\b\d{2}\s\d{2,4}\b"),
+    re.compile(r"\bdivision\s+\d{2}\b", re.IGNORECASE),
+    re.compile(r"\bsection\s+\d{2,6}\b", re.IGNORECASE),
+)
+
+
+def _has_explicit_identifier(user_query: str) -> bool:
+    """True when the query names a specific construction-document identifier.
+
+    Such queries are self-contained — the rewriter must pass them through
+    unchanged to avoid widening the retrieval scope.
+    """
+    if not user_query:
+        return False
+    return any(pat.search(user_query) for pat in _IDENTIFIER_PATTERNS)
 
 
 _SYSTEM_PROMPT = (
@@ -151,6 +194,14 @@ def rewrite(
     # ---- Skip rule 2: no session context to resolve against ----
     if not memory_context or not memory_context.get("had_context"):
         return _passthrough(user_query, "no_session_context")
+
+    # ---- Skip rule 2.5: explicit document identifier (v3.2) ----
+    # Hard skip — independent of any flag. Sheet numbers like "A-101",
+    # CSI section numbers, and explicit "section/division N" references make
+    # the query self-contained by construction. Paraphrasing them widens
+    # retrieval scope and contradicts user intent.
+    if _has_explicit_identifier(user_query):
+        return _passthrough(user_query, "explicit_identifier")
 
     # ---- Skip rule 3: anaphora heuristic ----
     if _flag_enabled("QUERY_REWRITER_SKIP_HEURISTIC"):

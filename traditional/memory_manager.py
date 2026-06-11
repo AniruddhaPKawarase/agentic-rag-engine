@@ -27,7 +27,7 @@ class Message:
     timestamp: float
     tokens: int = 0
     metadata: Optional[Dict[str, Any]] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "role": self.role,
@@ -48,6 +48,9 @@ class ConversationContext:
     pinned_documents: Optional[List[str]] = None  # pdf_names of pinned documents
     pinned_titles: Optional[List[str]] = None      # human-readable titles
     last_source_documents: Optional[List[Dict[str, Any]]] = None  # source docs from last response
+    # v3.4 (2026-05-20) — user attribution for ChatGPT-style sidebar
+    user_id: Optional[int] = None
+    client_session_id: Optional[str] = None
 
     def __post_init__(self):
         if self.recent_topics is None:
@@ -93,7 +96,7 @@ class ConversationSession:
             self.summaries = []
         if self.selected_documents is None:
             self.selected_documents = []
-    
+
     def get_last_message_by_role(self, role: str) -> Optional[str]:
         """Get the content of the last message with the given role."""
         for msg in reversed(self.messages):
@@ -120,7 +123,7 @@ class ConversationSession:
     def get_formatted_messages(self, include_system: bool = True) -> List[Dict[str, str]]:
         """Format messages for OpenAI API"""
         formatted = []
-        
+
         # Add conversation summary if exists
         if self.summaries:
             summary_text = "\n\n".join([s.summary_text for s in self.summaries[-2:]])  # Last 2 summaries
@@ -129,7 +132,7 @@ class ConversationSession:
                     "role": "system",
                     "content": f"Previous conversation summary:\n{summary_text}\n\nCurrent conversation:"
                 })
-        
+
         # Add recent messages (with token limit consideration)
         for msg in self.messages[-10:]:  # Last 10 messages max
             if msg.role == "system" and not include_system:
@@ -138,9 +141,9 @@ class ConversationSession:
                 "role": msg.role,
                 "content": msg.content
             })
-        
+
         return formatted
-    
+
     def add_message(self, role: str, content: str, tokens: int = 0, metadata: Optional[Dict] = None):
         """Add a new message to the conversation"""
         message = Message(
@@ -153,30 +156,30 @@ class ConversationSession:
         self.messages.append(message)
         self.total_tokens += tokens
         self.last_accessed = time.time()
-    
+
     def should_summarize(self, max_tokens: int = 4000, max_messages: int = 20) -> bool:
         """Check if conversation needs summarization"""
         # Check token count
         if self.total_tokens > max_tokens:
             return True
-        
+
         # Check message count
         if len(self.messages) > max_messages:
             return True
-        
+
         # Check time gap (if old messages exist)
         if len(self.messages) > 5:
             oldest_time = self.messages[0].timestamp
             newest_time = self.messages[-1].timestamp
             if newest_time - oldest_time > 3600:  # 1 hour gap
                 return True
-        
+
         return False
-    
+
     def get_full_conversation_history(self, include_summaries: bool = True) -> List[Dict[str, str]]:
         """Get complete conversation history including summaries"""
         formatted = []
-        
+
         # Add all summaries first
         if include_summaries and self.summaries:
             all_summaries = "\n\n".join([s.summary_text for s in self.summaries])
@@ -184,7 +187,7 @@ class ConversationSession:
                 "role": "system",
                 "content": f"Previous conversations summary:\n{all_summaries}"
             })
-        
+
         # Add ALL messages (not just recent ones)
         for msg in self.messages:
             formatted.append({
@@ -192,7 +195,7 @@ class ConversationSession:
                 "content": msg.content,
                 "timestamp": msg.timestamp
             })
-        
+
         return formatted
 
     def get_conversation_index(self) -> str:
@@ -236,40 +239,40 @@ class ConversationSession:
     ) -> List[Dict[str, str]]:
         """Get conversation history optimized for LLM while preserving important context"""
         all_messages = []
-        
+
         # Always include system messages if any
         system_msgs = []
         other_msgs = []
-        
+
         # Separate system and other messages
         for msg in self.messages:
             if msg.role == "system":
                 system_msgs.append(msg)
             else:
                 other_msgs.append(msg)
-        
+
         # Include all system messages
         for msg in system_msgs:
             all_messages.append({
                 "role": msg.role,
                 "content": msg.content
             })
-        
+
         # Strategically select other messages
         selected_msgs = []
-        
+
         if preserve_early_history and len(other_msgs) > 0:
             # Always include first message
             selected_msgs.append(other_msgs[0])
-            
+
             # If there are many messages, include some from the middle
             if len(other_msgs) > 10:
                 middle_index = len(other_msgs) // 2
                 selected_msgs.append(other_msgs[middle_index])
-            
+
             # Always include last 8 messages
             selected_msgs.extend(other_msgs[-8:])
-            
+
             # Remove duplicates while preserving order
             seen_indices = set()
             unique_msgs = []
@@ -282,14 +285,14 @@ class ConversationSession:
         else:
             # Just take recent messages
             selected_msgs = other_msgs[-10:] if len(other_msgs) > 10 else other_msgs
-        
+
         # Add selected messages
         for msg in selected_msgs:
             all_messages.append({
                 "role": msg.role,
                 "content": msg.content
             })
-        
+
         # Add summaries context
         if self.summaries:
             summary_text = "\n\n".join([s.summary_text for s in self.summaries])
@@ -297,27 +300,27 @@ class ConversationSession:
                 "role": "system",
                 "content": f"Previous conversation summaries:\n{summary_text}\n\nCurrent conversation:"
             })
-        
+
         # Token limit check (simplified)
         total_text = " ".join([m["content"] for m in all_messages])
         estimated_tokens = len(total_text) // 4
-        
+
         if estimated_tokens > max_tokens:
             # Remove some middle messages but keep first and last
             if len(all_messages) > 6:
                 # Keep: first system message, first user message, last 4 messages
                 system_msg = all_messages[0] if all_messages[0]["role"] == "system" else None
                 first_user_idx = next((i for i, m in enumerate(all_messages) if m["role"] == "user"), 0)
-                
+
                 filtered_messages = []
                 if system_msg:
                     filtered_messages.append(system_msg)
                 if first_user_idx > 0 and first_user_idx < len(all_messages):
                     filtered_messages.append(all_messages[first_user_idx])
-                
+
                 filtered_messages.extend(all_messages[-4:])
                 all_messages = filtered_messages
-        
+
         return all_messages
 
 # ==============================
@@ -326,7 +329,7 @@ class ConversationSession:
 
 class MemoryManager:
     """Manages conversation memory with optimization"""
-    
+
     def __init__(
         self,
         max_sessions: int = 100,
@@ -338,43 +341,52 @@ class MemoryManager:
         self.max_sessions = max_sessions
         self.max_tokens_per_session = max_tokens_per_session
         self.max_messages_before_summary = max_messages_before_summary
-        
+
         # Session storage
         self.sessions: OrderedDict[str, ConversationSession] = OrderedDict()
-        
+
         # Persistence
         self.storage_path = storage_path
         self.enable_persistence = enable_persistence
-        
+
         if storage_path and enable_persistence:
             Path(storage_path).mkdir(parents=True, exist_ok=True)
             self._load_sessions()
-    
+
     def _generate_session_id(self, user_query: str, project_id: Optional[int] = None) -> str:
         """Generate a unique session ID"""
         # Create a hash based on query, project_id, and timestamp
         base_string = f"{user_query[:50]}_{project_id}_{time.time()}"
         session_hash = hashlib.md5(base_string.encode()).hexdigest()[:12]
         return f"session_{session_hash}"
-    
+
     def create_session(
         self,
         user_query: str,
         project_id: Optional[int] = None,
         filter_source_type: Optional[str] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        user_id: Optional[int] = None,
+        client_session_id: Optional[str] = None,
     ) -> str:
-        """Create a new conversation session"""
+        """Create a new conversation session.
+
+        v3.4 (2026-05-20): added optional user_id and client_session_id so the
+        Track A session JSON written to S3 carries user attribution and a
+        stable handle the UI can use to resume the chat.
+        """
         # Generate session ID if not provided
         if not session_id:
             session_id = self._generate_session_id(user_query, project_id)
-        
+
         # Create context
         context = ConversationContext(
             project_id=project_id,
-            filter_source_type=filter_source_type
+            filter_source_type=filter_source_type,
+            user_id=user_id,
+            client_session_id=client_session_id,
         )
-        
+
         # Create session
         session = ConversationSession(
             session_id=session_id,
@@ -388,21 +400,21 @@ class MemoryManager:
                 "created_date": datetime.now().isoformat()
             }
         )
-        
+
         # Add to sessions (with LRU eviction if needed)
         self.sessions[session_id] = session
-        
+
         if len(self.sessions) > self.max_sessions:
             # Remove least recently used session
             oldest_session_id = next(iter(self.sessions))
             del self.sessions[oldest_session_id]
-        
+
         # Save if persistence is enabled
         if self.enable_persistence:
             self._save_session(session)
-        
+
         return session_id
-    
+
     def get_session(self, session_id: str) -> Optional[ConversationSession]:
         """Get a session by ID. Falls back to S3 if not in memory."""
         session = self.sessions.get(session_id)
@@ -443,7 +455,7 @@ class MemoryManager:
         except Exception as e:
             print(f"S3 single session load failed for {session_id}: {e}")
         return None
-    
+
     def add_to_session(
         self,
         session_id: str,
@@ -456,33 +468,33 @@ class MemoryManager:
         session = self.get_session(session_id)
         if not session:
             return False
-        
+
         session.add_message(role, content, tokens, metadata)
-        
+
         # Check if we need to summarize
         if session.should_summarize():
             self._summarize_session(session)
-        
+
         # Save if persistence is enabled
         if self.enable_persistence:
             self._save_session(session)
-        
+
         return True
-    
+
     def _summarize_session(self, session: ConversationSession):
         """Summarize older parts of conversation WITHOUT deleting original messages"""
         if len(session.messages) < 8:  # Increased minimum for summarization
             return
-        
+
         # Only summarize if we have enough messages
         if len(session.messages) > self.max_messages_before_summary:
             # Take first half for summarization (but keep them)
             split_point = len(session.messages) // 2
             messages_to_summarize = session.messages[:split_point]
-            
+
             # Create summary
             summary_text = self._create_detailed_summary(messages_to_summarize)
-            
+
             summary = ConversationSummary(
                 summary_text=summary_text,
                 message_count=len(messages_to_summarize),
@@ -490,52 +502,52 @@ class MemoryManager:
                 end_time=messages_to_summarize[-1].timestamp,
                 key_points=self._extract_key_points(messages_to_summarize)
             )
-            
+
             # Add summary but DON'T remove original messages
             session.summaries.append(summary)
-        
+
     def _create_detailed_summary(self, messages: List[Message]) -> str:
         """Create a more detailed summary of messages"""
         user_messages = [m for m in messages if m.role == "user"]
         assistant_messages = [m for m in messages if m.role == "assistant"]
-        
+
         if not user_messages:
             return "No user messages to summarize."
-        
+
         # Extract key information
         first_query = user_messages[0].content
         important_queries = []
-        
+
         # Identify important queries (first, and any with technical terms)
-        technical_terms = ["requirement", "specification", "drawing", "code", "standard", 
+        technical_terms = ["requirement", "specification", "drawing", "code", "standard",
                           "material", "installation", "compliance", "fire", "safety"]
-        
+
         for i, msg in enumerate(user_messages):
             content_lower = msg.content.lower()
             is_important = (i == 0 or  # First query
                            i == len(user_messages) - 1 or  # Last query
                            any(term in content_lower for term in technical_terms) or
                            len(msg.content.split()) > 10)  # Detailed query
-            
+
             if is_important:
                 query_preview = msg.content[:120] + "..." if len(msg.content) > 120 else msg.content
                 important_queries.append(f"Query {i+1}: {query_preview}")
-        
+
         summary_parts = [
             f"Conversation covered {len(messages)} messages ({len(user_messages)} user queries).",
             f"First query was about: '{first_query[:100]}...'" if len(first_query) > 100 else f"First query: {first_query}",
         ]
-        
+
         if important_queries:
             summary_parts.append("Important questions asked:")
             summary_parts.extend(important_queries[:5])  # Top 5 important queries
-        
+
         return "\n".join(summary_parts)
-    
+
     def _extract_key_points(self, messages: List[Message]) -> List[str]:
         """Extract key points from messages"""
         key_points = []
-        
+
         for msg in messages:
             if msg.role == "user":
                 # Extract key phrases (simplified)
@@ -545,9 +557,9 @@ class MemoryManager:
                     question = content.split("?")[0].strip()
                     if len(question) > 10 and len(question) < 100:
                         key_points.append(f"Q: {question[:80]}...")
-        
+
         return list(set(key_points))[:5]  # Return up to 5 unique key points
-    
+
     def get_conversation_history(
         self,
         session_id: str,
@@ -558,28 +570,28 @@ class MemoryManager:
         session = self.get_session(session_id)
         if not session:
             return []
-        
+
         # Get formatted messages
         messages = session.get_formatted_messages(include_system=True)
-        
+
         # Calculate token count (rough estimate)
         total_chars = sum(len(m["content"]) for m in messages)
         estimated_tokens = total_chars // 4
-        
+
         # If too long, use sliding window
         if estimated_tokens > max_tokens:
             # Keep most recent messages that fit within limit
             kept_messages = []
             current_tokens = 0
-            
+
             # Always include system message if present
             system_msgs = [m for m in messages if m["role"] == "system"]
             other_msgs = [m for m in messages if m["role"] != "system"]
-            
+
             for msg in system_msgs:
                 kept_messages.append(msg)
                 current_tokens += len(msg["content"]) // 4
-            
+
             # Add recent messages until limit
             for msg in reversed(other_msgs):
                 msg_tokens = len(msg["content"]) // 4
@@ -588,9 +600,9 @@ class MemoryManager:
                     current_tokens += msg_tokens
                 else:
                     break
-        
+
         return messages
-    
+
     def update_context(
         self,
         session_id: str,
@@ -615,7 +627,7 @@ class MemoryManager:
             session.context.pinned_documents = pinned_documents
         if pinned_titles is not None:
             session.context.pinned_titles = pinned_titles
-    
+
     def clear_session(self, session_id: str) -> bool:
         """Clear a session — from S3 when STORAGE_BACKEND=s3, from local disk otherwise."""
         if session_id in self.sessions:
@@ -642,13 +654,13 @@ class MemoryManager:
 
             return True
         return False
-    
+
     def get_session_stats(self, session_id: str) -> Dict[str, Any]:
         """Get statistics for a session"""
         session = self.get_session(session_id)
         if not session:
             return {"error": "Session not found"}
-        
+
         return {
             "session_id": session_id,
             "message_count": len(session.messages),
@@ -661,11 +673,11 @@ class MemoryManager:
                 "filter_source_type": session.context.filter_source_type
             }
         }
-    
+
     # ==============================
     # Persistence Methods
     # ==============================
-    
+
     def _save_session(self, session: ConversationSession):
         """Save session — S3 only when STORAGE_BACKEND=s3, local disk otherwise."""
         if not self.enable_persistence:
@@ -807,14 +819,14 @@ class MemoryManager:
         """Clean up old sessions"""
         current_time = time.time()
         old_sessions = []
-        
+
         for session_id, session in list(self.sessions.items()):
             if current_time - session.last_accessed > max_age_hours * 3600:
                 old_sessions.append(session_id)
-        
+
         for session_id in old_sessions:
             self.clear_session(session_id)
-        
+
         return len(old_sessions)
 
 # ==============================

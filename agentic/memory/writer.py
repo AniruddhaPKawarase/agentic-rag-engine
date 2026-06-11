@@ -176,11 +176,30 @@ class MemoryWriter:
         assistant_text: str,
         project_id: Optional[int],
         set_id: Optional[str],
+        turn_id: Optional[str] = None,
+        turn_type: str = "rag",
+        parent_turn_id: Optional[str] = None,
+        source_documents: Optional[list] = None,
     ) -> None:
         """Submit a turn-write to the background pool and return.
 
         This must NEVER raise. Any submission failure is logged and the
         caller continues unaffected.
+
+        Parameters
+        ----------
+        turn_id : str | None
+            Stable UUID identifying the (user, assistant) turn pair. The
+            caller mints this synchronously *before* dispatch so the value
+            can flow back to the HTTP client without waiting on the
+            background write. When None, no turn_id is attached.
+        turn_type : str
+            "rag" (default — normal Q&A turn) or "deep_dive" (vision-based
+            secondary analysis). Used by Deep Dive recall + audit pipelines.
+        parent_turn_id : str | None
+            For ``turn_type == "deep_dive"``, the turn_id of the original
+            RAG turn that this Deep Dive enhances. Enables traversal of
+            the (rag -> deep_dive) chain in conversation history.
         """
         try:
             self._executor.submit(
@@ -190,6 +209,10 @@ class MemoryWriter:
                 assistant_text,
                 project_id,
                 set_id,
+                turn_id,
+                turn_type,
+                parent_turn_id,
+                source_documents,
             )
         except RuntimeError as exc:
             # Executor shut down or rejected — don't crash the request.
@@ -206,6 +229,10 @@ class MemoryWriter:
         assistant_text: str,
         project_id: Optional[int],
         set_id: Optional[str],
+        turn_id: Optional[str] = None,
+        turn_type: str = "rag",
+        parent_turn_id: Optional[str] = None,
+        source_documents: Optional[list] = None,
     ) -> None:
         """Top-level worker — wraps everything in a global try/except.
 
@@ -213,7 +240,8 @@ class MemoryWriter:
         """
         try:
             self._do_write_turn(
-                session_id, user_text, assistant_text, project_id, set_id
+                session_id, user_text, assistant_text, project_id, set_id,
+                turn_id, turn_type, parent_turn_id, source_documents,
             )
         except Exception as exc:  # noqa: BLE001 - intentional safety net
             # Truly last-resort: any uncaught error is swallowed and
@@ -230,6 +258,10 @@ class MemoryWriter:
         assistant_text: str,
         project_id: Optional[int],
         set_id: Optional[str],
+        turn_id: Optional[str] = None,
+        turn_type: str = "rag",
+        parent_turn_id: Optional[str] = None,
+        source_documents: Optional[list] = None,
     ) -> None:
         vector_enabled = _flag_enabled("MEMORY_WRITER_VECTOR_ENABLED")
 
@@ -241,7 +273,71 @@ class MemoryWriter:
 
         # --- Step 2: append to MemoryManager (always) ---
         mm = self._get_memory_manager()
-        meta = {"project_id": project_id, "set_id": set_id}
+        # turn_id/turn_type/parent_turn_id/source_documents are optional
+        # ADDITIVE fields. Older readers ignore them; newer readers (Deep
+        # Dive recall + audit) use them to traverse (rag -> deep_dive)
+        # chains and reuse the cited source_documents without a fresh
+        # MongoDB hit during Deep Dive.
+        meta: Dict[str, Any] = {"project_id": project_id, "set_id": set_id}
+        if turn_id is not None:
+            meta["turn_id"] = turn_id
+        if turn_type and turn_type != "rag":
+            meta["turn_type"] = turn_type
+        if parent_turn_id is not None:
+            meta["parent_turn_id"] = parent_turn_id
+        if source_documents:
+            # Trim source_documents to the essential fields Deep Dive needs.
+            # Accept BOTH key shapes so this works regardless of whether
+            # the caller passes normalized docs (post _extract_source_documents:
+            # `s3_path`, `pdf_name`, `display_title`) or raw agent output
+            # (`s3BucketPath`, `pdfName`, `drawingName`, `drawingTitle`,
+            # `sheet_number`).
+            def _pick(sd: Dict[str, Any], *keys: str) -> Any:
+                for k in keys:
+                    v = sd.get(k)
+                    if v not in (None, ""):
+                        return v
+                return ""
+
+            trimmed: list = []
+            for sd in source_documents:
+                if not isinstance(sd, dict):
+                    continue
+                # Normalize keys at write time so the reader (Deep Dive)
+                # sees a single consistent shape.
+                s3_path = _pick(sd, "s3_path", "s3BucketPath", "sourceFile")
+                pdf_name = _pick(sd, "pdf_name", "pdfName")
+                drawing_name = _pick(sd, "drawing_name", "drawingName")
+                drawing_title = _pick(sd, "drawing_title", "drawingTitle", "sectionTitle")
+                display_title = _pick(
+                    sd, "display_title", "sheet_number", "drawingTitle",
+                    "sectionTitle", "drawingName",
+                ) or pdf_name
+                trimmed.append({
+                    "s3_path": s3_path,
+                    "pdf_name": pdf_name,
+                    "file_name": _pick(sd, "file_name", "name", "sourceFile") or pdf_name,
+                    "display_title": display_title,
+                    "drawing_name": drawing_name,
+                    "drawing_title": drawing_title,
+                    "page": sd.get("page") or 1,
+                    # Carry png_url + download_url forward if upstream
+                    # already built them (prod orchestrator does;
+                    # v31 chain does not — Deep Dive derives in agent).
+                    "png_url": sd.get("png_url"),
+                    "download_url": sd.get("download_url"),
+                    # v3.3 (2026-05-18) — spec chunk identity for Deep Dive
+                    # follow-ups. parent_id lets the next Deep Dive call
+                    # group chunks of the same spec section even when the
+                    # UI passes a single representative pdf_name. Null on
+                    # drawings — they're already 1-doc-per-sheet.
+                    "parent_id": (
+                        sd.get("parent_id")
+                        or sd.get("parentId")
+                    ),
+                    "fragment_count": sd.get("fragment_count"),
+                })
+            meta["source_documents"] = trimmed
         user_turn_index, asst_turn_index = self._append_to_memory_manager(
             mm, session_id, user_text, assistant_text, meta
         )

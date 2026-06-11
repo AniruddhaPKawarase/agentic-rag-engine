@@ -52,10 +52,10 @@ def set_tool_result(tool_name: str, result: Any, **kwargs: Any) -> None:
 
 # ── Agent cache ───────────────────────────────────────────────────────
 
-def get_agent_result(query: str, project_id: int, set_id: int = None) -> Optional[Any]:
-    """Get cached agent result, or None if not cached."""
+def get_agent_result(query: str, project_id: int, set_id: int = None, mode: str = None) -> Optional[Any]:
+    """Get cached agent result, or None if not cached. [V19-CACHE-MODE]"""
     normalized = query.strip().lower()
-    key = _make_key("agent", normalized, project_id, set_id)
+    key = _make_key("agent", normalized, project_id, set_id, mode)
     with _agent_lock:
         result = _agent_cache.get(key)
     if result is not None:
@@ -68,12 +68,13 @@ def set_agent_result(
     project_id: int,
     result: Any,
     set_id: int = None,
+    mode: str = None,  # [V19-CACHE-MODE]
 ) -> None:
     """Cache an agent result (only if confidence is not 'low')."""
     if hasattr(result, "confidence") and result.confidence == "low":
         return  # Don't cache low-confidence results
     normalized = query.strip().lower()
-    key = _make_key("agent", normalized, project_id, set_id)
+    key = _make_key("agent", normalized, project_id, set_id, mode)  # [V19-CACHE-MODE-SETKEY]
     with _agent_lock:
         _agent_cache[key] = result
     logger.info(f"Agent cache SET: project={project_id}")

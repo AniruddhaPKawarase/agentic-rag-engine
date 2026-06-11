@@ -1,12 +1,12 @@
 """
-Gateway request / response models — Pydantic v2 BaseModel schemas.
+Gateway request / response models - Pydantic v2 BaseModel schemas.
 
 QueryRequest validates inbound queries.
 UnifiedResponse is the standardised envelope returned by the orchestrator.
 
 Phase 1 additions: fields needed for the DocQA bridge and to align the
 Pydantic model with the wire payload the orchestrator actually emits.
-All new fields are Optional with safe defaults — existing clients that
+All new fields are Optional with safe defaults - existing clients that
 do not know about these fields are unaffected (forward compatibility).
 """
 
@@ -22,6 +22,8 @@ class QueryRequest(BaseModel):
 
     query: str = Field(..., min_length=1, max_length=2000)
     project_id: int = Field(..., ge=1, le=999999)
+    user_id: Optional[int] = Field(default=None, ge=1)
+    client_session_id: Optional[str] = None
     session_id: Optional[str] = None
     search_mode: Optional[str] = None
     generate_document: bool = True
@@ -60,3 +62,10 @@ class UnifiedResponse(BaseModel):
     docqa_session_id: Optional[str] = None
     groundedness_score: Optional[float] = None
     flagged_claims: Optional[list[dict]] = None
+    # --- External source answers (meeting agent + email search + RFI) ---
+    meeting_answer: Optional[str] = None
+    email_answer: Optional[str] = None
+    rfi_answer: Optional[str] = None
+    # --- Multi-source routing ---
+    final_answer: str = ""
+    sources_used: list[str] = Field(default_factory=list)
