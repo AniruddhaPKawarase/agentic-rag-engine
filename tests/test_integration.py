@@ -48,8 +48,8 @@ async def test_agentic_success_no_fallback():
 
 
 @pytest.mark.asyncio
-async def test_agentic_low_confidence_triggers_fallback():
-    """AgenticRAG returns low confidence -> Traditional RAG takes over."""
+async def test_agentic_low_confidence_triggers_document_discovery():
+    """AgenticRAG returns low confidence -> document discovery instead of FAISS fallback."""
     from gateway.orchestrator import Orchestrator
 
     orch = Orchestrator(fallback_enabled=True)
@@ -59,25 +59,16 @@ async def test_agentic_low_confidence_triggers_fallback():
     mock_agentic.sources = []
     mock_agentic.confidence = "low"
     mock_agentic.needs_escalation = False
+    mock_agentic.follow_up_questions = []
 
     orch.agentic.ensure_initialized = MagicMock()
     orch.agentic.query = AsyncMock(return_value=mock_agentic)
 
-    trad_result = {
-        "success": True,
-        "answer": "Based on the electrical drawings, the panel is 200A rated.",
-        "sources": [{"text": "200A panel board"}],
-        "confidence": "high",
-    }
-    orch.traditional.query = AsyncMock(return_value=trad_result)
-    orch.traditional._faiss_loaded = True
-
     result = await orch.query("Panel rating?", project_id=7325)
 
-    assert result["fallback_used"] is True
-    assert result["engine_used"] == "traditional"
+    assert result["needs_document_selection"] is True
     assert result["agentic_confidence"] == "low"
-    assert "200A" in result["answer"]
+    assert isinstance(result["available_documents"], list)
 
 
 @pytest.mark.asyncio
@@ -107,8 +98,8 @@ async def test_engine_override_traditional():
 
 
 @pytest.mark.asyncio
-async def test_agentic_exception_triggers_fallback():
-    """AgenticRAG throws exception -> fallback to Traditional."""
+async def test_agentic_exception_triggers_document_discovery():
+    """AgenticRAG throws exception -> document discovery with available titles."""
     from gateway.orchestrator import Orchestrator
 
     orch = Orchestrator(fallback_enabled=True)
@@ -116,18 +107,10 @@ async def test_agentic_exception_triggers_fallback():
     orch.agentic.ensure_initialized = MagicMock()
     orch.agentic.query = AsyncMock(side_effect=RuntimeError("MongoDB connection lost"))
 
-    trad_result = {
-        "success": True,
-        "answer": "Found the answer via document search.",
-        "sources": [{"drawing": "E-101"}],
-    }
-    orch.traditional.query = AsyncMock(return_value=trad_result)
-    orch.traditional._faiss_loaded = True
-
     result = await orch.query("Electrical plans?", project_id=7212)
 
-    assert result["fallback_used"] is True
-    assert "Found the answer" in result["answer"]
+    assert result["needs_document_selection"] is True
+    assert isinstance(result["available_documents"], list)
 
 
 @pytest.mark.asyncio
