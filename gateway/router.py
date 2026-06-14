@@ -90,6 +90,17 @@ except Exception as _hist_exc:  # noqa: BLE001
         "[history-endpoint] not loaded: %s: %s",
         type(_hist_exc).__name__, _hist_exc,
     )
+
+# --- projects listing endpoint (additive) — GET /projects over drawings_v3 -
+try:
+    from gateway.projects_endpoint import router as _projects_router
+    router.include_router(_projects_router)
+except Exception as _proj_exc:  # noqa: BLE001
+    import logging as _proj_logging
+    _proj_logging.getLogger(__name__).warning(
+        "[projects-endpoint] not loaded: %s: %s",
+        type(_proj_exc).__name__, _proj_exc,
+    )
 # -------------------------------------------------------------------------
 
 
