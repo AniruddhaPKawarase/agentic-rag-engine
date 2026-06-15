@@ -1256,6 +1256,50 @@ def run_agent(
     if cached is not None:
         return cached
 
+    # [UAR-V1] Unit/room area resolver — deterministic square-footage answers.
+    # Pairs unit_tags_mined <-> sf_callouts spatially (drawings_v3) and returns
+    # the area with a grounded citation. Fires only on detected unit-area queries
+    # at high/medium confidence; otherwise falls through to the normal pipeline.
+    # Flag UNIT_AREA_RESOLVER_ENABLED (default true).
+    try:
+        from gateway.unit_area_resolver import (
+            detect_unit_area_query as _uar_detect,
+            resolve_unit_area as _uar_resolve,
+            build_answer_text as _uar_answer,
+        )
+        _uar_unit = _uar_detect(query)
+        if _uar_unit:
+            _uar_res = _uar_resolve(int(project_id), _uar_unit)
+            if _uar_res and _uar_res.get('area_sf') is not None:
+                _uar_text = _uar_answer(_uar_res)
+                import logging as _uar_log
+                _uar_log.getLogger(__name__).info(
+                    '[uar-v1] short-circuit %s -> %s SF (conf=%s sheet=%s)',
+                    _uar_unit, _uar_res.get('area_sf'), _uar_res.get('confidence'),
+                    _uar_res.get('source_sheet'))
+                _uar_sd = _uar_res.get('source_doc') or {}
+                _uar_result = AgentResult(
+                    answer=_uar_text,
+                    steps=[], sources=[_uar_res.get('source_sheet') or ''],
+                    total_steps=0, total_input_tokens=0, total_output_tokens=0,
+                    total_cost_usd=0.0, elapsed_ms=0, model='unit_area_resolver',
+                    confidence=_uar_res.get('confidence', 'high'),
+                    follow_up_questions=[
+                        f"What is the unit type or bay count for {_uar_unit}?",
+                        f"What are the finishes specified for {_uar_unit}?",
+                        'Which other units are on the same level?',
+                    ],
+                    source_docs=[_uar_sd] if _uar_sd else [],
+                )
+                try:
+                    set_agent_result(query, project_id, _uar_result, set_id, mode=_coll_scope)
+                except Exception:
+                    pass
+                return _uar_result
+    except Exception as _uar_exc:  # noqa: BLE001
+        import logging as _uar_elog
+        _uar_elog.getLogger(__name__).warning('[uar-v1] resolver error (%s); pipeline continues', _uar_exc)
+
     # ── Daily budget check ────────────────────────────────────────────
     if not _check_daily_budget(0):
         return AgentResult(
@@ -1561,6 +1605,48 @@ def run_agent(
                 if q:
                     follow_up_questions.append(q)
         follow_up_questions = follow_up_questions[:5]  # cap at 5
+
+    # [followup-fallback] The ---FOLLOW_UP--- trailer is unreliable across
+    # the agentic loop + dual-model synthesis + stylist, so it often arrives
+    # empty. When empty (and we have a real answer), generate exactly 3
+    # follow-ups deterministically from (query, answer) via the same LLM
+    # client. Never raises. Flag: FOLLOWUP_FALLBACK_ENABLED (default true).
+    if (not follow_up_questions and answer and len(answer.strip()) > 40
+            and _dual_os.environ.get('FOLLOWUP_FALLBACK_ENABLED', 'true').lower() == 'true'):
+        try:
+            _fu_model = _dual_os.environ.get('FOLLOWUP_MODEL', 'gpt-4.1-mini')
+            _fu_messages = [
+                {'role': 'system', 'content': (
+                    'You suggest follow-up questions for a construction-document '
+                    'Q&A assistant. Given the user question and the answer that was '
+                    'given, output EXACTLY 3 concise, specific, distinct follow-up '
+                    'questions the user is likely to ask next. Each must be answerable '
+                    'from construction drawings or specifications. Output ONLY the 3 '
+                    "questions, each on its own line starting with '- '. No preamble, "
+                    'no numbering, no extra text.')},
+                {'role': 'user', 'content': (
+                    'Question: ' + str(query) + '\n\nAnswer: ' + str(answer)[:1500]
+                    + '\n\nWrite exactly 3 follow-up questions:')},
+            ]
+            _fu_resp = _llm_call(_fu_messages, [], model=_fu_model)
+            if _fu_resp and getattr(_fu_resp, 'choices', None):
+                _fu_text = (_fu_resp.choices[0].message.content or '')
+                for _ln in _fu_text.splitlines():
+                    _ln = _ln.strip()
+                    # strip bullets / numbering prefixes
+                    while _ln[:1] in ('-', '*', '\u2022', '.'):
+                        _ln = _ln[1:].strip()
+                    if _ln and _ln[0].isdigit():
+                        _p = _ln.split('.', 1)
+                        if len(_p) == 2 and _p[0].strip().isdigit():
+                            _ln = _p[1].strip()
+                    if _ln and len(follow_up_questions) < 3:
+                        follow_up_questions.append(_ln)
+                if follow_up_questions:
+                    logger.info('[followup-fallback] generated %d follow-ups',
+                                len(follow_up_questions))
+        except Exception:
+            logger.warning('[followup-fallback] generation failed', exc_info=True)
 
     # Compute cost (GPT-4.1: $2/1M input, $8/1M output)
     cost = (total_input * 2.0 + total_output * 8.0) / 1_000_000
