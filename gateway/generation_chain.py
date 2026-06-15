@@ -1656,6 +1656,16 @@ def _build_response_dict(
     except Exception as exc:  # noqa: BLE001
         logger.warning("chain: v3 bbox enrich failed (%s); continuing", exc)
 
+    # [SVR-P1] observe-only: spatial-value-lookup slot frame. Wrapped so it
+    # can never raise into the response build — zero retrieval behavior change.
+    _svr_frame = None
+    try:
+        import os as _svr_os
+        if _svr_os.getenv('SPATIAL_PARSER_ENABLED', 'true').lower() in ('1', 'true', 'yes', 'on'):
+            from gateway.spatial_query_parser import parse as _svr_parse
+            _svr_frame = _svr_parse(user_query).to_dict()
+    except Exception:
+        _svr_frame = None
     return {
         # core answer
         "query": user_query,
@@ -1698,6 +1708,7 @@ def _build_response_dict(
             "source_documents_post_filter_count": len(source_docs),
             # Phase 2026-06-02 fix: how many sources were retrieved before dedup
             "all_retrieved_sources_count": len(source_docs_pre_dedup),
+            "spatial_frame": _svr_frame,  # [SVR-P1] observe-only
         },
         # timing + identity
         "processing_time_ms": elapsed_ms,

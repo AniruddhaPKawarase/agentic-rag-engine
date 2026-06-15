@@ -1300,6 +1300,38 @@ def run_agent(
         import logging as _uar_elog
         _uar_elog.getLogger(__name__).warning('[uar-v1] resolver error (%s); pipeline continues', _uar_exc)
 
+    # [SVR-P2] Structured Value Resolver — unit_type/cfm/duct_size/count via the
+    # P1 slot frame. Runs AFTER UAR (area untouched). Abstains -> normal pipeline.
+    try:
+        import os as _svr_os2
+        if _svr_os2.getenv('STRUCTURED_VALUE_RESOLVER_ENABLED', 'true').lower() in ('1', 'true', 'yes', 'on'):
+            from gateway.spatial_query_parser import parse as _svr_parse2
+            from gateway.structured_value_resolver import resolve as _svr_resolve2
+            _svr_frame2 = _svr_parse2(query)
+            _svr_res2 = _svr_resolve2(_svr_frame2, int(project_id), query)
+            if _svr_res2 and _svr_res2.get('value') is not None:
+                import logging as _svr_log2
+                _svr_log2.getLogger(__name__).info(
+                    '[svr-p2] short-circuit attr=%s value=%s conf=%s',
+                    _svr_res2.get('attribute'), _svr_res2.get('value'), _svr_res2.get('confidence'))
+                _svr_sd2 = _svr_res2.get('source_doc') or {}
+                _svr_result2 = AgentResult(
+                    answer=_svr_res2.get('answer') or '',
+                    steps=[], sources=[(_svr_sd2.get('drawing_name') or '')],
+                    total_steps=0, total_input_tokens=0, total_output_tokens=0,
+                    total_cost_usd=0.0, elapsed_ms=0, model='structured_value_resolver',
+                    confidence=_svr_res2.get('confidence', 'medium'),
+                    follow_up_questions=[], source_docs=[_svr_sd2] if _svr_sd2.get('drawing_name') else [],
+                )
+                try:
+                    set_agent_result(query, project_id, _svr_result2, set_id, mode=_coll_scope)
+                except Exception:
+                    pass
+                return _svr_result2
+    except Exception as _svr_exc2:  # noqa: BLE001
+        import logging as _svr_elog2
+        _svr_elog2.getLogger(__name__).warning('[svr-p2] resolver error (%s); pipeline continues', _svr_exc2)
+
     # ── Daily budget check ────────────────────────────────────────────
     if not _check_daily_budget(0):
         return AgentResult(
@@ -1332,6 +1364,29 @@ def run_agent(
     context_hint += "]"
 
     user_content = f"{context_hint}\n\n---USER QUERY---\n{query}\n---END QUERY---"
+    # [SVR-P3A] enumerate-completeness hint for spatial-value questions that
+    # should list ALL values (e.g. 'ceiling heights on Level 01'). Never raises.
+    try:
+        import os as _p3_os
+        if _p3_os.getenv('SPATIAL_ENUMERATE_HINT_ENABLED', 'true').lower() in ('1', 'true', 'yes', 'on'):
+            from gateway.spatial_query_parser import parse as _p3_parse
+            _p3_fr = _p3_parse(query)
+            _p3_enum = bool(getattr(_p3_fr, 'is_spatial_value', False)) and (
+                _p3_fr.form == 'enumerate' or (
+                    _p3_fr.attribute in ('ceiling_height', 'elevation', 'dimension')
+                    and (_p3_fr.scope or {}).get('level') is not None
+                    and not _p3_fr.entity))
+            if _p3_enum:
+                _p3_attr = (_p3_fr.attribute or 'value').replace('_', ' ')
+                user_content += (
+                    f"\n\n[ANSWER REQUIREMENT] This question asks for {_p3_attr} values across an "
+                    "area/level. If the retrieved drawings contain MULTIPLE distinct "
+                    f"{_p3_attr} values, you MUST enumerate ALL of them — each with the room/area "
+                    "it applies to and its source sheet — not just one 'typical' value. State the "
+                    "most common/typical value explicitly IN ADDITION to the full list. Only give a "
+                    "single value if the drawings genuinely show only one.")
+    except Exception:
+        pass
 
     sanitized_history = _sanitize_history(conversation_history) if conversation_history else None
 

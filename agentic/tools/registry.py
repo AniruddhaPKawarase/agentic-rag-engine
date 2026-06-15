@@ -1282,3 +1282,46 @@ def _filter_disabled_tools():
 
 
 _filter_disabled_tools()
+
+
+# ── [SVR-P6] optional deterministic structured-value tool (gated OFF) ──
+def get_structured_value(project_id, query, **kwargs):
+    """Deterministically look up a specific structured value (unit area/type,
+    equipment CFM/capacity/model, duct size, counts). Returns found=False when
+    the value is not in the structured data so the agent uses other tools."""
+    try:
+        from gateway.spatial_query_parser import parse as _p
+        from gateway.structured_value_resolver import resolve as _r
+        _fr = _p(query or '')
+        _res = _r(_fr, int(project_id), query or '')
+        if _res and _res.get('value') is not None:
+            return {'found': True, 'answer': _res.get('answer'),
+                    'attribute': _res.get('attribute'), 'value': _res.get('value'),
+                    'source_sheet': (_res.get('source_doc') or {}).get('drawing_name'),
+                    'confidence': _res.get('confidence')}
+        return {'found': False, 'note': 'No deterministic structured value; use other tools.'}
+    except Exception as _e:  # noqa: BLE001
+        return {'found': False, 'error': str(_e)}
+
+try:
+    import os as _svr6_os
+    if _svr6_os.getenv('SVR_AGENT_TOOLS_ENABLED', 'false').lower() in ('1', 'true', 'yes', 'on'):
+        TOOL_FUNCTIONS['get_structured_value'] = get_structured_value
+        TOOL_DEFINITIONS.append({
+            'type': 'function',
+            'function': {
+                'name': 'get_structured_value',
+                'description': ('Deterministically look up ONE specific structured value for a '
+                    'sub-question: unit area or unit type, equipment CFM/capacity/model, duct '
+                    'size, or a count. Returns found=false if not in structured data (then use '
+                    'other tools). Use for precise value lookups like "area of U-218" or '
+                    '"CFM of CU-1.5".'),
+                'parameters': {'type': 'object', 'properties': {
+                    'project_id': {'type': 'integer'},
+                    'query': {'type': 'string', 'description': 'A single value-lookup sub-question.'}},
+                    'required': ['project_id', 'query']},
+            }})
+        import logging as _svr6_log
+        _svr6_log.getLogger(__name__).info('[svr-p6] get_structured_value tool ENABLED')
+except Exception:
+    pass
